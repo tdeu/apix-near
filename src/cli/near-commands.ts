@@ -180,6 +180,43 @@ export function registerNearCommands(program: Command, apixVersion: string): voi
     .description('NEAR: give an AI agent a spending-limited vault (Agent Vault)');
 
   near
+    .command('account-create <names...>')
+    .description('Testnet: create free accounts through the NEAR faucet and save their keys to ~/.near-credentials/testnet')
+    .action(run(async (names: string[]) => {
+      const { KeyPair } = await import('near-api-js');
+      const os = await import('os');
+      for (const name of names) {
+        const accountId = name.endsWith('.testnet') ? name : `${name}.testnet`;
+        if (!/^[a-z0-9_-]{2,}\.testnet$/.test(accountId)) {
+          throw new Error(`"${accountId}": use lowercase letters, digits, - or _ (top-level testnet names only).`);
+        }
+        const file = path.join(os.homedir(), '.near-credentials', 'testnet', `${accountId}.json`);
+        if (await fs.pathExists(file)) {
+          console.log(chalk.yellow(`= ${accountId}: key already saved in ${file}, skipping`));
+          continue;
+        }
+        const key = KeyPair.fromRandom('ed25519');
+        const response = await fetch('https://helper.nearprotocol.com/account', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ newAccountId: accountId, newAccountPublicKey: key.getPublicKey().toString() }),
+          signal: AbortSignal.timeout(60_000),
+        });
+        if (!response.ok) {
+          const text = (await response.text()).slice(0, 300);
+          throw new Error(`Faucet refused ${accountId} (HTTP ${response.status}): ${text || 'no details'}. If the name is taken, try another.`);
+        }
+        await fs.outputJson(file, {
+          account_id: accountId,
+          public_key: key.getPublicKey().toString(),
+          private_key: key.toString(),
+        }, { spaces: 2, mode: 0o600 });
+        console.log(chalk.green(`✅ ${accountId} created (key saved to ${file})`));
+        console.log(chalk.gray(`   ${accountUrl('testnet', accountId)}`));
+      }
+    }));
+
+  near
     .command('deploy-attestations')
     .description('Deploy your own attestation contract, locked (no access keys: nobody can change it)')
     .requiredOption('--account <owner>', 'Account that pays for the deployment')
