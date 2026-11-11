@@ -175,7 +175,7 @@ export function runNearStaticRules(project: ProjectFiles): RuleOutput {
           rule: 'NEAR-KEY-IN-CLIENT', severity: 'fail',
           title: 'Browser code handles a private key',
           detail: `${file.path} runs in the browser and uses ${m[0]}. Any key it touches is visible to every user.`,
-          fix: 'In the browser, sign with the user\'s own wallet (NEAR Wallet Selector). Keep app keys in server-only code, ideally behind an Agent Vault: apix add agent-wallet --chain near.',
+          fix: 'In the browser, let users sign with their own wallet (apix add wallet --chain near sets that up). Keep app keys in server-only code, ideally behind an Agent Vault: apix add agent-wallet --chain near.',
           file: file.path, line: lineOf(file.content, m.index),
         });
       }
