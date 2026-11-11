@@ -13,6 +13,12 @@ import {
 } from '../near/vault';
 import { upsertEnv, readEnv, isGitIgnored } from '../near/env-file';
 import { maskSecrets } from '../utils/secrets';
+import fs from 'fs-extra';
+import { verifyNearProject } from '../verify';
+import { printReport, reportHash } from '../verify/report';
+import { VerifyReport } from '../verify/types';
+import { attestReport, readAttestation } from '../near/attest';
+import { ATTESTATION_CONTRACT } from '../near/config';
 
 async function confirmNearMainnet(network: NearNetwork, yes?: boolean): Promise<void> {
   if (network !== 'mainnet' || yes) return;
@@ -53,7 +59,90 @@ async function agentKeyFrom(options: { envFile?: string }): Promise<{ key: KeyPa
   return { key: key as KeyPairString, vault: process.env.NEAR_VAULT_ID ?? env.NEAR_VAULT_ID };
 }
 
-export function registerNearCommands(program: Command): void {
+export function registerNearCommands(program: Command, apixVersion: string): void {
+  program
+    .command('verify [directory]')
+    .description('Check an app built by APIX, an agent or a person: keys, spending routes, contracts, claimed transactions')
+    .option('--chain <chain>', 'Chain to check', 'near')
+    .option('--app-id <id>', 'Name for the report and attestation (default: package.json name)')
+    .option('--network <network>', 'testnet or mainnet, recorded in the report (default NEAR_NETWORK or testnet)')
+    .option('--offline', 'Code checks only, no ledger reads')
+    .option('--out <file>', 'Where to write the JSON report', 'apix-report.json')
+    .option('--json', 'Print the report as JSON instead of text')
+    .action(run(async (directory: string | undefined, options) => {
+      if (options.chain !== 'near') {
+        throw new Error(`apix verify supports --chain near in this build. (${options.chain} verification is on the roadmap.)`);
+      }
+      const network = resolveNetwork(options.network);
+      const report = await verifyNearProject({
+        directory: directory ?? '.', appId: options.appId, network, offline: options.offline, apixVersion,
+      });
+      const hash = reportHash(report);
+      await fs.writeFile(path.resolve(options.out), JSON.stringify(report, null, 2) + '\n');
+      if (options.json) {
+        console.log(JSON.stringify({ ...report, reportHash: hash }, null, 2));
+      } else {
+        printReport(report, hash);
+        console.log(chalk.gray(`Report written to ${options.out}. Publish it on-chain with: apix attest ${options.out} --account <you>.testnet`));
+      }
+      if (report.summary.verdict === 'fail') process.exitCode = 1;
+    }));
+
+  program
+    .command('attest [report]')
+    .description('Publish the hash and summary of an apix verify report on NEAR (public, timestamped)')
+    .requiredOption('--account <account>', 'Account that signs the attestation')
+    .option('--network <network>', 'testnet or mainnet')
+    .option('--contract <id>', 'Attestation contract (default: the APIX one for the network)')
+    .option('--source <url>', 'Where the code and report live, e.g. a commit URL')
+    .option('-y, --yes', 'Skip the mainnet confirmation')
+    .action(run(async (reportFile: string | undefined, options) => {
+      const network = resolveNetwork(options.network);
+      const contractId = options.contract ?? ATTESTATION_CONTRACT[network];
+      if (!contractId) throw new Error(`No attestation contract configured for ${network}. Pass --contract.`);
+      const report = await fs.readJson(path.resolve(reportFile ?? 'apix-report.json')) as VerifyReport;
+      if (report.format !== 'apix-verify/1') throw new Error('That file is not an apix verify report.');
+      const credentials = await loadCredentials(network, options.account);
+      await confirmNearMainnet(network, options.yes);
+      const { txHash, hash } = await attestReport(accountFor(network, credentials), contractId, report, options.source);
+      console.log(chalk.green(`✅ Attested ${report.appId}: ${report.summary.verdict.toUpperCase()} (${report.summary.failures} failures, ${report.summary.warnings} warnings)`));
+      console.log(`   Report hash ${hash}`);
+      console.log(chalk.gray(`   ${txUrl(network, txHash)}`));
+      console.log(chalk.gray(`   Anyone can check it: apix attestation ${credentials.accountId} "${report.appId}" --report ${reportFile ?? 'apix-report.json'}`));
+    }));
+
+  program
+    .command('attestation <attester> <appId>')
+    .description('Read an attestation from NEAR, and check a report file against it')
+    .option('--report <file>', 'Report file to compare with the on-chain hash')
+    .option('--network <network>', 'testnet or mainnet')
+    .option('--contract <id>', 'Attestation contract')
+    .action(run(async (attester: string, appId: string, options) => {
+      const network = resolveNetwork(options.network);
+      const contractId = options.contract ?? ATTESTATION_CONTRACT[network];
+      if (!contractId) throw new Error(`No attestation contract configured for ${network}. Pass --contract.`);
+      const record = await readAttestation(network, contractId, attester, appId);
+      if (!record) {
+        console.log(chalk.yellow(`No attestation by ${attester} for "${appId}" on ${network}.`));
+        process.exitCode = 1;
+        return;
+      }
+      const when = new Date(Number(BigInt(record.timestamp_ns) / 1_000_000n)).toISOString();
+      console.log(chalk.bold(`${record.app_id}: ${record.verdict.toUpperCase()}`) + chalk.gray(` (revision ${record.revision}, ${when})`));
+      console.log(`  ${record.checks_run} checks · ${record.failures} failures · ${record.warnings} warnings · apix ${record.apix_version}`);
+      console.log(`  Attested by ${record.attester}${record.source ? ` · ${record.source}` : ''}`);
+      console.log(chalk.gray(`  Report hash ${record.report_hash}`));
+      if (options.report) {
+        const local = reportHash(await fs.readJson(path.resolve(options.report)));
+        if (local === record.report_hash) {
+          console.log(chalk.green(`✓ ${options.report} matches the on-chain attestation.`));
+        } else {
+          console.log(chalk.red(`✗ ${options.report} does NOT match (local hash ${local}).`));
+          process.exitCode = 1;
+        }
+      }
+    }));
+
   const near = program
     .command('near')
     .description('NEAR: give an AI agent a spending-limited vault (Agent Vault)');

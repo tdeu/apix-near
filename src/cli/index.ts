@@ -657,7 +657,7 @@ program
     }
   });
 
-registerNearCommands(program);
+registerNearCommands(program, packageJson.version);
 
 program.showHelpAfterError();
 
