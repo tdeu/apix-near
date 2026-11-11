@@ -89,7 +89,7 @@
   },
   "homepage": "https://github.com/tdeu/apix#readme",
   "engines": {
-    "node": ">=20.19"
+    "node": ">=22.12"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.122.0",
