@@ -11,7 +11,7 @@ set -uo pipefail
 
 OWNER="${1:?usage: $0 <owner>.testnet <receiver>.testnet}"
 RECEIVER="${2:?usage: $0 <owner>.testnet <receiver>.testnet}"
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+ROOT="$(cd "$(dirname "$0")/.." && (pwd -W 2>/dev/null || pwd))"  # pwd -W: C:/... paths on Git Bash, so node can require them
 APIX="node $ROOT/dist/cli/index.js"
 SUFFIX="$(date +%H%M%S)"
 VAULT_NAME="vault-$SUFFIX"
