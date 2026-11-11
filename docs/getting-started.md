@@ -28,7 +28,7 @@ the hackathon release: run the install again.
 ## 3. Create a Next.js app
 
 APIX supports Next.js with the App Router and TypeScript
-([support matrix](../README.md#support-matrix)). It was tested with
+([support matrix](HEDERA_README.md#support-matrix)). It was tested with
 create-next-app 16.4.0 (Next.js 16.4.0).
 
 ```bash

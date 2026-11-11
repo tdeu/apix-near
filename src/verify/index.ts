@@ -17,6 +17,9 @@ export interface VerifyOptions {
 
 export async function verifyNearProject(options: VerifyOptions): Promise<VerifyReport> {
   const project = await collectFiles(options.directory);
+  if (project.files.length === 0) {
+    throw new Error(`No source files found in ${options.directory}. Run apix verify in the app's folder.`);
+  }
   const staticResult = runNearStaticRules(project);
   const checks = [...staticResult.checks];
   const findings = [...staticResult.findings];

@@ -20,7 +20,7 @@ directory.
 
 `add` refuses, and leaves the project unchanged, when:
 - the framework isn't supported (see the
-  [support matrix](../README.md#support-matrix));
+  [support matrix](HEDERA_README.md#support-matrix));
 - it would overwrite a file that differs from what APIX generates (re-run
   with `--force` to overwrite);
 - the integration isn't available (`account`).
@@ -62,7 +62,7 @@ with, for example:
 | `apix chat` | An interactive conversation about your Hedera project. `--industry` and `--context` set the starting context, `--session-file <file>` resumes a saved session, and `--clean` uses plain terminal output. |
 
 Provider and model selection are described in the
-[README](../README.md#ai-features). An API failure (rejected key, rate
+[README](HEDERA_README.md#ai-features). An API failure (rejected key, rate
 limit, unknown model) exits 1 with the provider's message. There are no
 canned replies.
 

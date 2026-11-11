@@ -54,7 +54,30 @@ export function readCliSpec(source = fs.readFileSync(path.join(REPO_ROOT, 'src/c
     commands.set(command[1], flags);
   }
   commands.set('help', new Set(['-h', '--help']));
+  addNearCommands(commands);
   return { commands, globalFlags };
+}
+
+/**
+ * Commands registered in src/cli/near-commands.ts: verify, attest and
+ * attestation at the top level; everything else under `apix near` (its
+ * subcommands' flags are merged into "near").
+ */
+function addNearCommands(commands: Map<string, Set<string>>, file = path.join(REPO_ROOT, 'src/cli/near-commands.ts')): void {
+  if (!fs.existsSync(file)) return;
+  const source = fs.readFileSync(file, 'utf8');
+  const topLevel = new Set(['verify', 'attest', 'attestation']);
+  const near = commands.get('near') ?? new Set<string>(['-h', '--help']);
+  for (const segment of source.split(/\.command\(\s*[`']/).slice(1)) {
+    const name = segment.match(/^([a-z-]+)/)?.[1] ?? '';
+    const target = topLevel.has(name) ? (commands.get(name) ?? new Set<string>(['-h', '--help'])) : near;
+    // Options up to the next .command( (the segment ends there)
+    for (const match of segment.matchAll(/\.(?:required)?[oO]ption\(\s*'([^']+)'/g)) {
+      flagsOf(match[1]).forEach(flag => target.add(flag));
+    }
+    if (topLevel.has(name)) commands.set(name, target);
+  }
+  commands.set('near', near);
 }
 
 export interface CommandUse {

@@ -79,6 +79,17 @@ export function runNearStaticRules(project: ProjectFiles): RuleOutput {
     checks.push({ rule, title, status });
   };
 
+  // 0. Nothing to verify must never read as a pass
+  if (!usesNear) {
+    findings.push({
+      rule: 'NEAR-NOTHING-TO-CHECK', severity: 'warn',
+      title: 'No NEAR code found',
+      detail: 'This project has no NEAR dependency or NEAR code, so most checks could not run. A pass here would mean nothing.',
+      fix: 'Run apix verify in the folder of the NEAR app (where its package.json is).',
+    });
+    checks.push({ rule: 'NEAR-NOTHING-TO-CHECK', title: 'The project contains NEAR code to check', status: 'warned' });
+  }
+
   // 1. Private keys and seed phrases written into files git would publish
   {
     const found: Finding[] = [];

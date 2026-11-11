@@ -120,6 +120,15 @@ describe('apix verify --chain near (code checks)', () => {
     const dir = await project({ 'package.json': JSON.stringify({ name: 'plain' }), 'index.ts': 'export const a = 1;\n' });
     const report = await verifyNearProject({ directory: dir, network: 'testnet', offline: true, apixVersion: 'test' });
     expect(report.checks.find(c => c.rule === 'NEAR-KEY-IN-CLIENT')?.status).toBe('skipped');
+    // Found in a real run: an empty or non-NEAR folder used to come out as PASS
+    expect(report.summary.verdict).toBe('warn');
+    expect(rules(report)).toEqual(['NEAR-NOTHING-TO-CHECK:warn']);
+  });
+
+  it('refuses an empty folder', async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'apix-empty-'));
+    await expect(verifyNearProject({ directory: dir, network: 'testnet', offline: true, apixVersion: 'test' }))
+      .rejects.toThrow(/No source files/);
   });
 });
 

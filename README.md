@@ -1,280 +1,170 @@
-# APIX
+# APIX for NEAR: verify what your agent built
 
-Published as apix-hedera from 2.1.1 (earlier versions: apix-ai).
+**Built at NEAR HACKATHON (Nov 2026).** Tracks: **AI Security & Defense**, Open Innovation.
 
-**A CLI that adds working Hedera integrations to a Next.js app.**
-Hedera Africa Hackathon 2025, Developer Tools & Infrastructure track.
+Coding agents can now build a whole NEAR app from a prompt. The people
+using them often can't read the result, and on a blockchain mistakes are
+irreversible: a key in the wrong file, a payment route anyone can call, or a
+model that can be talked into sending everything it controls.
 
-APIX analyses your project and writes Hedera Token Service, Consensus
-Service, smart contract and wallet code into it: server-side modules, API
-routes, React hooks and components that build and run as generated. The
-code signs with your operator account on the server, and the private key
-never reaches the browser. Optional AI commands (Anthropic or OpenAI)
-explain Hedera concepts and help you choose an integration.
+APIX closes that gap in three steps:
 
-**Status: v2.1, testnet-proven.** Every Hedera operation below was run on
-testnet and verified on the mirror node. The IDs, links and fees are in
-[docs/TESTNET_PROOF.md](docs/TESTNET_PROOF.md).
+| Step | Command | What it does |
+|---|---|---|
+| **Verify** | `apix verify` | Checks any NEAR app, whoever wrote it: exposed keys, secrets shipped to the browser, spending routes with no auth or cap, AI tools that can spend without limit, and on-chain facts (contracts deployed, who can replace them, whether the app's key is valid and how much it can do, whether linked transactions really happened). Every finding comes with a plain-language fix. |
+| **Fix** | `apix near vault create` + `apix add agent-wallet --chain near` | Gives the agent an **Agent Vault** instead of a key: a contract account with per-payment and daily limits, an allowlist, pause, and owner approval for anything over the limit. It's created with **no full-access key**, so nobody can bypass the rules, the owner included. The generator writes the server code, LLM tools (OpenAI and Anthropic formats), API routes and a status component into a Next.js app. |
+| **Attest** | `apix attest` | Publishes the report's SHA-256 and verdict on NEAR, in a contract with no access keys. Anyone can check a report against it with `apix attestation`. |
 
-What changed in 2.1 and why: [docs/REVIVAL_2.1.md](docs/REVIVAL_2.1.md).
+Everything below runs as written. The first part needs no NEAR account.
 
-Repository: [github.com/tdeu/apix](https://github.com/tdeu/apix)
+## 1. Try it in 2 minutes (no account, no keys)
 
-## Support matrix
+Needs Node.js 22.12 or newer and git.
 
-| Project | `apix add` |
-|---|---|
-| Next.js, App Router, TypeScript | Supported: `hts`, `consensus`, `smart-contract`, `wallet` (HashPack and Blade, via their browser extensions) |
-| React/Vite, TypeScript | `wallet` only, experimental |
-| Anything else (Pages Router routes, JavaScript, Vue, Angular, Express, plain Node) | Refused with a message; the project is left unchanged |
-
-The Pages Router is supported for `wallet` and `smart-contract`, which
-generate no routes. Tested with Next.js 16.3.6.
-
-## Quick start
-
-The measured part (the app's install, then `apix add hts` through
-`next build`) took about 6 minutes on a laptop; installing APIX from source
-adds its own `npm ci`. You need Node.js 20+, git, and a free Hedera
-testnet account from [portal.hedera.com](https://portal.hedera.com/faucet)
-(its account ID and DER-encoded private key).
-
-1. Install APIX:
-
-   ```bash
-   npm install -g apix-hedera
-   ```
-
-2. Create a Next.js app and add HTS:
-
-   ```bash
-   npx create-next-app@latest my-hedera-app --ts --app --src-dir --eslint --tailwind --import-alias "@/*" --use-npm --yes
-   cd my-hedera-app
-   apix add hts
-   ```
-
-3. Put your testnet account in `.env.local` (server-side only; never
-   `NEXT_PUBLIC_`):
-
-   ```bash
-   HEDERA_NETWORK=testnet
-   HEDERA_ACCOUNT_ID=0.0.xxxxx
-   HEDERA_PRIVATE_KEY=302e...
-   ```
-
-4. Build and start it (or use `npx next dev`):
-
-   ```bash
-   npx next build
-   npx next start
-   ```
-
-5. Call the four generated routes. Replace `0.0.TOKEN` with the ID from the
-   first response, and `0.0.RECIPIENT` with an account that can receive the
-   token:
-
-   ```bash
-   curl -X POST http://localhost:3000/api/tokens/create -H "content-type: application/json" -d '{"name":"My Token","symbol":"MYT","decimals":2,"initialSupply":100000}'
-   curl "http://localhost:3000/api/tokens/info?tokenId=0.0.TOKEN"
-   curl -X POST http://localhost:3000/api/tokens/mint -H "content-type: application/json" -d '{"tokenId":"0.0.TOKEN","amount":5000}'
-   curl -X POST http://localhost:3000/api/tokens/transfer -H "content-type: application/json" -d '{"tokenId":"0.0.TOKEN","toAccountId":"0.0.RECIPIENT","amount":1000}'
-   ```
-
-The full walk-through is in [docs/getting-started.md](docs/getting-started.md).
-
-### Measured timings
-
-From one run in Phase 4 of the revival, on a Windows 10 laptop with about
-1.3 GB of free RAM
-([details](docs/TESTNET_PROOF.md#timings-phase-4-one-run-windows-10-laptop-about-12-to-14-gb-free-ram)):
-
-- the fresh app's own `npm install`: 107.7 s;
-- from the start of `apix add hts` to a successful `next build`: 246.6 s
-  (about 4 minutes). This includes `add hts` installing its packages
-  (94.6 s), `apix add consensus` (14.2 s) and `next build` (107.5 s).
-
-## Commands
-
-Full reference: [docs/commands.md](docs/commands.md).
-
-**No keys needed:** `apix analyze`, `apix add <integration>`, `apix init`,
-`apix status`, `apix health`, `apix logs`, `apix last-error`,
-`apix debug-info`, `apix --help`, `apix --version`.
-
-**Needs Hedera credentials** (`HEDERA_ACCOUNT_ID`, `HEDERA_PRIVATE_KEY`):
-`apix validate` (a local check, no network call), `apix create-token`, and
-`apix add hts --create-token`. The last two submit transactions and cost
-HBAR.
-
-**Needs an AI key** (`ANTHROPIC_API_KEY` or `OPENAI_API_KEY`):
-`apix explain`, `apix compare`, `apix recommend`, `apix confidence`,
-`apix debug`, `apix generate`, `apix chat`. Without a key they exit 1 with a
-message saying which key to set.
-
-**Experimental:** `apix compose --experimental`. It is hidden from `--help`
-unless `APIX_EXPERIMENTAL=1` is set, needs an AI key, and lists the files it
-composed (with any unimplemented stubs) without writing them.
-
-## Hedera integration summary
-
-What each `apix add` generates is in
-[docs/integrations.md](docs/integrations.md). Every ID below is from the
-testnet proof and links to HashScan.
-
-### Hedera Token Service (HTS)
-
-Tokens are the most common first step on Hedera. HTS creates them natively,
-without deploying a contract, so the generated code is a thin, auditable
-layer over the SDK.
-
-- **Transactions:** TokenCreateTransaction, TokenMintTransaction,
-  TransferTransaction, TokenInfoQuery. Token association is not part of 2.1
-  (see [integrations](docs/integrations.md#hts)).
-- **Proven on testnet:**
-  - token [0.0.10782448](https://hashscan.io/testnet/token/0.0.10782448):
-    created, minted and transferred through APIX's library;
-  - token [0.0.10782464](https://hashscan.io/testnet/token/0.0.10782464):
-    created by `apix create-token` with admin and supply keys;
-  - token [0.0.10782086](https://hashscan.io/testnet/token/0.0.10782086):
-    created, minted and transferred through a generated app's routes;
-  - token [0.0.10782603](https://hashscan.io/testnet/token/0.0.10782603):
-    created by a generated app without `maxSupply` (infinite supply).
-- **Observed fees (testnet):** token create 12.94 ℏ, mint 0.013 ℏ, and a
-  first transfer to an auto-associating account 0.65 ℏ.
-
-### Hedera Consensus Service (HCS)
-
-HCS gives an ordered, timestamped log without running a contract. That
-makes it a simple way for an app to record events.
-
-- **Transactions:** TopicCreateTransaction, TopicMessageSubmitTransaction.
-- **Proven on testnet:**
-  - topic [0.0.10782451](https://hashscan.io/testnet/topic/0.0.10782451)
-    with two messages (library);
-  - topic [0.0.10782081](https://hashscan.io/testnet/topic/0.0.10782081)
-    (generated `/api/consensus/*` routes).
-- **Observed fees (testnet):** topic create 0.13 ℏ, message submit
-  0.002 ℏ.
-
-### Smart contracts
-
-For logic that HTS and HCS don't cover, the generated module deploys
-Solidity bytecode and calls it with ABI-encoded arguments.
-
-- **Transactions:** ContractCreateFlow (FileCreateTransaction,
-  ContractCreateTransaction, FileDeleteTransaction),
-  ContractExecuteTransaction, ContractCallQuery.
-- **Proven on testnet:**
-  - contract [0.0.10782455](https://hashscan.io/testnet/contract/0.0.10782455)
-    (library);
-  - contract [0.0.10782597](https://hashscan.io/testnet/contract/0.0.10782597)
-    (generated `smartContractManager`).
-  In both, `set(...)` wrote a string and `get()` read the same string back.
-- **Observed fees (testnet):** deploy 14.80 ℏ in total (1.64 + 13.07 +
-  0.09 ℏ), `set` call 0.05 ℏ.
-
-### Accounts and fees
-
-- Operator account: `0.0.10780747` (ECDSA). Demo recipient: `0.0.10777128`
-  (ED25519, unlimited automatic associations).
-- The whole library proof (token create, mint and transfer, topic with two
-  messages, contract deploy and call) cost 28.59 ℏ of testnet HBAR, which
-  the testnet faucet provides for free.
-- Hedera fees are fixed in USD, so costs are predictable when planning an
-  app. The HBAR amounts above vary with the HBAR price and with each
-  transaction's options (see the
-  [fees table](docs/TESTNET_PROOF.md#fees-observed)).
-
-## Architecture
-
-```mermaid
-flowchart LR
-  dev[Developer] -->|apix add hts| cli[APIX CLI]
-  subgraph APIX
-    cli --> analyzer[Project analyzer<br/>framework, layout]
-    analyzer --> policy[Support policy]
-    policy --> planner[Integration planner]
-    planner --> templates[Handlebars templates]
-    templates --> generator[Generator<br/>overwrite check, rollback]
-  end
-  generator -->|writes files, npm install| app
-  subgraph app[Generated Next.js app]
-    ui[React UI<br/>hooks, components] -->|HTTP| routes[API routes<br/>server-only]
-    routes --> sdk[Hedera SDK client<br/>operator key]
-  end
-  sdk -->|signed transactions| hedera[(Hedera network<br/>HTS, HCS, contracts)]
-  hedera -->|receipts: IDs, status| sdk
-  hedera -->|records| mirror[(Mirror node / HashScan)]
-  mirror -->|verification| dev
+```bash
+git clone https://github.com/tdeu/apix-near
+cd apix-near
+npm ci
+npm run build
 ```
 
-`apix create-token` and `apix validate` use APIX's own SDK layer
-(`src/services/hedera-operations.ts`) directly, without generating code.
+**See it fail an unsafe agent-built app.** [`examples/unsafe-tip-agent`](examples/unsafe-tip-agent) is a small "AI tip agent" written the way coding agents often write NEAR apps on a first pass:
 
-## Security
+```bash
+node dist/cli/index.js verify examples/unsafe-tip-agent --offline
+```
 
-- **Keys stay on the server.** The generated Hedera modules start with
-  `import 'server-only'`, so importing them from client code fails the
-  build. Credentials are read from server environment variables; the
-  generated code never uses `NEXT_PUBLIC_` for them.
-- **No fallbacks.** Missing credentials or AI keys are errors with a clear
-  message. APIX never uses mock data, test accounts or canned AI replies,
-  and never reports success without an ID from the network's receipt.
-- **Secrets are masked** (first 6 characters at most) in console output,
-  log files, `apix logs` / `apix last-error` and error messages.
-- **Mainnet needs confirmation:** with `HEDERA_NETWORK=mainnet`,
-  `create-token` and `add hts --create-token` ask before spending, or need
-  `--yes`.
-- `.env` files are git-ignored. Start from [.env.example](.env.example).
+Expected: `FAIL`, **4 failures and 2 warnings** (secret behind `NEXT_PUBLIC_`, browser code holding a key, a payment route anyone can call, an LLM tool that can spend without limit; uncapped amount, hardcoded mainnet), each with a fix. The exit code is 1.
 
-## AI features
+**See it pass the fixed version.** [`examples/agent-shop`](examples/agent-shop) is a shopping agent whose payments go through an Agent Vault. Its NEAR code was generated by `apix add agent-wallet --chain near`:
 
-The AI commands use Anthropic when `ANTHROPIC_API_KEY` is set, otherwise
-OpenAI when `OPENAI_API_KEY` is set. There is no silent failover between
-providers; a failed request is an error with the provider's message.
+```bash
+node dist/cli/index.js verify examples/agent-shop --offline
+```
 
-| Provider | Default model | Override |
+Expected: `PASS`, 7 checks run, 0 failures. Exit code 0. (The 4 ledger checks show as skipped because of `--offline`.)
+
+**Run the test suite:**
+
+```bash
+npm test
+```
+
+Expected: every suite passes (about 290 tests). The verify rules, the generator (including "what APIX generates passes `apix verify`"), report hashing and the ledger checks (against a mocked RPC) are covered. The contracts have their own Rust tests: `cd contracts/agent-vault && cargo test` (21 tests) and `cd contracts/attestations && cargo test` (5 tests).
+
+## 2. The full flow on NEAR testnet (about 5 minutes, free)
+
+This creates real testnet accounts with the NEAR faucet, then runs every vault rule and an attestation on-chain. It uses about 5.3 testnet NEAR; the faucet gives each new account 10.
+
+```bash
+node dist/cli/index.js near account-create yourname-apix yourname-shop
+scripts/near-testnet-demo.sh yourname-apix.testnet yourname-shop.testnet
+```
+
+Pick unused names (`account-create` says so if a name is taken). Keys are saved to `~/.near-credentials/testnet/`. On Windows, run the script in Git Bash.
+
+What the script does, and what you should see:
+
+1. Creates a vault: 0.5 NEAR per payment, 1 NEAR per day, only `yourname-shop.testnet` allowed. `✅ Vault created`, with one function-call key and **no full-access key**.
+2. Agent pays 0.2 NEAR to the shop: `✅ Paid`.
+3. Agent tries `attacker.testnet`: `🛑 Refused ... not on the allowlist`.
+4. Agent tries 0.8 NEAR: `🛑 Refused ... exceeds the per-transaction limit`.
+5. Same with `--escalate`: `⏸️ ... Filed approval request #0`.
+6. Owner approves: `✅ approve done`.
+7. Owner pauses, the agent is refused (`vault is paused`), the owner unpauses.
+8. The agent key calls `set_limits` directly: rejected by the protocol, `Access key does not allow method set_limits`.
+9. Deploys a locked attestation contract, verifies `examples/unsafe-tip-agent` (now with a throwaway key committed in `.env`), attests the report and checks it back: `✓ ... matches the on-chain attestation`.
+
+It ends with `All steps behaved as expected.` and stops at the first step that doesn't.
+
+Our own run, with every transaction linked: [docs/NEAR_TESTNET_PROOF.md](docs/NEAR_TESTNET_PROOF.md).
+
+## 3. Use it on your own app
+
+```bash
+# In your NEAR app's folder (any app: written by you, by APIX or by an agent)
+apix verify                      # code + ledger checks, writes apix-report.json
+apix attest --account you.testnet --source https://github.com/you/app/commit/abc123
+apix attestation you.testnet my-app --report apix-report.json
+```
+
+Giving an agent money, in a Next.js app:
+
+```bash
+apix add agent-wallet --chain near
+apix near vault create --account you.testnet --allow shop.testnet --per-tx 0.5 --daily 2 --fund 3
+apix near vault status
+apix near vault pay --to shop.testnet --amount 0.1 --memo "test"
+apix near vault approve agent-vault.you.testnet 0 --account you.testnet
+apix near vault pause agent-vault.you.testnet --account you.testnet
+```
+
+(Run from a clone, `apix` is `node dist/cli/index.js`; `npm link` installs it as `apix`.)
+
+`--fund` is what the agent can spend. APIX adds the contract's storage (about 2 NEAR for 196 kB of code) and a gas reserve on top. The agent key is written to `.env.local` and `vault create` refuses to run if that file isn't gitignored.
+
+Then give your model the generated tools:
+
+```ts
+import { openAiTools, runVaultTool } from '@/lib/near/agent-tools';
+// pass openAiTools to chat.completions.create({ tools }), then for each tool call:
+const result = await runVaultTool(call.function.name, JSON.parse(call.function.arguments));
+```
+
+[`examples/agent-shop/lib/agent.ts`](examples/agent-shop/lib/agent.ts) shows the whole loop.
+
+## How it works
+
+**Agent Vault** ([contracts/agent-vault](contracts/agent-vault/src/lib.rs), Rust, near-sdk 5.30)
+
+- Created by one transaction the owner signs, sent to `<name>.<owner>`: `CreateAccount`, `Transfer`, `DeployContract`, `FunctionCall(new)`, `AddKey(agent key, function-call only)`. The account never has a full-access key.
+- The agent key can only call `pay` and `request_approval` on the vault, and has a 0.25 NEAR gas allowance. The protocol enforces this before the contract even runs (see step 8 above).
+- `pay` checks, on-chain: not paused, signed by a registered agent key, receiver allowlisted, amount ≤ per-payment limit, today's total ≤ daily limit (rolling 24 h window), balance left for storage and gas. Refusals start with `POLICY:`.
+- `request_approval` files an over-limit payment for the owner; the receiver must still be allowlisted. At most 20 can be open, so a leaked key can't fill storage.
+- Owner-only: `approve`, `reject`, `set_limits`, `allow_receiver`, `remove_receiver`, `pause`, `unpause`, `add_agent_key`, `revoke_agent_key` (the contract deletes the key from its own account), `withdraw`.
+- `check_payment` is a free view that explains why a payment would be refused. The CLI and generated code call it before signing, so refusals cost no gas.
+- Payments, approvals and revocations emit NEP-297 events.
+
+**Attestations** ([contracts/attestations](contracts/attestations/src/lib.rs))
+
+- `attest` stores the report hash, verdict, counts, APIX version and an optional source URL, keyed by (attester, app). Anyone can attest; readers decide whom to trust. Storage is paid by the attester, and the unused deposit is refunded.
+- Deployed with no access keys (`apix near deploy-attestations`), so neither the code nor the records can be changed. Ours on testnet: `attest-163736.tomapix.testnet`.
+- The report format (`apix-verify/1`) is chain-agnostic: canonical JSON (sorted keys) hashed with SHA-256. It pins the checked code with a hash over the files (env file *names* only, never their contents) and the git commit.
+
+**Verify** ([src/verify](src/verify))
+
+| Rule | Severity | Catches |
 |---|---|---|
-| Anthropic | `claude-sonnet-5` | `APIX_ANTHROPIC_MODEL` (`APIX_ANTHROPIC_FAST_MODEL` for the fast tier) |
-| OpenAI | `gpt-4o-mini` | `APIX_OPENAI_MODEL` |
+| `NEAR-KEY-IN-REPO` | fail | NEAR private keys or seed phrases in any committed file |
+| `NEAR-ENV-COMMITTED` | fail | `.env` files tracked by git that set a key |
+| `NEAR-KEY-PUBLIC-ENV` | fail | `NEXT_PUBLIC_`, `VITE_`, `REACT_APP_`... secrets, which ship to every visitor |
+| `NEAR-KEY-IN-CLIENT` | fail | Browser code (`'use client'`, Vite apps, components) that builds a signer from a key |
+| `NEAR-UNPROTECTED-SPEND-ROUTE` | fail / warn | Server routes that can trigger signing with no auth; amounts from the request with no cap. Follows imports one level deep. |
+| `NEAR-AGENT-UNBOUNDED-SPEND` | fail | Files that import an LLM SDK and reach code that signs NEAR transactions, without a vault |
+| `NEAR-MAINNET-HARDCODED` | warn | Mainnet endpoints hardcoded in code that spends |
+| `NEAR-CONTRACT-DEPLOYED` | fail | Configured contract ids with no account or no code |
+| `NEAR-CONTRACT-UPGRADE-KEYS` | warn | Contracts with full-access keys (their code or funds can be changed by a key holder) |
+| `NEAR-SERVER-KEY-SCOPE` | fail / warn | A key in local env files that doesn't belong to its account; a server signing with a full-access key |
+| `NEAR-LEDGER-CLAIMS` | fail / warn | Explorer links in the repo to transactions that failed or can't be found |
+| `NEAR-NOTHING-TO-CHECK` | warn | No NEAR code at all, so a pass would mean nothing |
 
-If the provider rejects a model, the error names the variable to set.
+Secrets are never printed (the first 6 characters at most) and never hashed into the report.
 
-## Changes since the October 2025 hackathon submission
+## Honest limits
 
-- Simulation mode, mock responses and test-account fallbacks were removed;
-  commands fail with a clear error instead.
-- The testnet IDs published in the hackathon README were never created on
-  testnet. They are replaced by real, mirror-verified IDs.
-- Generated code now installs, type-checks and builds in a fresh Next.js
-  app, and works on testnet.
-- AI commands no longer return canned replies without a key; the default
-  models were updated.
-- Token creation no longer goes through hedera-agent-kit (it lost token
-  IDs); contract calls now encode their arguments.
-- Dependencies were patched (no critical or high `npm audit` advisories in
-  production dependencies).
-- Commands that did nothing real (`deploy`, several `validate` flags) were
-  removed.
+- `apix verify` is a set of targeted checks, not an audit. The code checks are pattern-based, so they can miss things and occasionally misfire; each one has tests for what it should and shouldn't flag. A PASS means "none of these known mistakes were found".
+- The Agent Vault contract has unit tests and a full testnet run, but no external audit. Use testnet or small amounts.
+- The generator targets Next.js (App Router, TypeScript). `verify` works on any JavaScript/TypeScript project.
+- NEAR also offers hosted policy-bound agent wallets (the Agent API linked from the hackathon's Agent Economy track). APIX is complementary: it checks whatever an agent built, and its vault is a contract the owner deploys and controls.
 
-Details: [CHANGELOG.md](CHANGELOG.md).
+## What was built during the hackathon
 
-## Documentation
+APIX existed before the hackathon as a Hedera CLI ([tdeu/apix](https://github.com/tdeu/apix), Hedera Africa Hackathon 2025). Per the rules, that baseline is disclosed and kept separate:
 
-- [Getting started](docs/getting-started.md)
-- [Commands](docs/commands.md)
-- [Integrations](docs/integrations.md)
-- [Troubleshooting](docs/troubleshooting.md)
-- [Testnet proof](docs/TESTNET_PROOF.md)
-- [Mainnet proof](docs/MAINNET_PROOF.md)
-- [Contributing](CONTRIBUTING.md)
-- [Hackathon-era documents](docs/archive/README.md) (not maintained)
+- **Baseline:** branch [`pre-hackathon`](https://github.com/tdeu/apix-near/tree/pre-hackathon) = commit `e55850a` (14 Oct 2026, before the 19 Oct announcement). Hedera-only.
+- **Hackathon work:** everything after it. [Full diff](https://github.com/tdeu/apix-near/compare/pre-hackathon...main): `contracts/`, `src/near/`, `src/verify/`, `src/cli/near-commands.ts`, `examples/`, `scripts/near-*.sh`, the NEAR docs and their tests.
+- The Hedera features still work but are not part of this submission. Their documentation: [docs/HEDERA_README.md](docs/HEDERA_README.md).
 
-## Team
+**Libraries:** near-api-js 7.5, near-sdk 5.30 (Rust), commander, chalk, fs-extra, jest, cargo-near (CI builds the wasm in [.github/workflows/contracts.yml](.github/workflows/contracts.yml)). The code was written with AI coding assistance (Claude), reviewed and tested by the team.
 
-- **Moustapha Diop**: Lead Developer ([@0xfishbone](https://github.com/0xfishbone))
-- **Thomas De Rouck**: Blockchain Specialist ([@tdeu](https://github.com/tdeu))
-
-## License
-
-MIT, see [LICENSE](LICENSE).
+**Team:** Emtée Studio (Thomas De Rouck, Moustapha Diop). MIT licensed.

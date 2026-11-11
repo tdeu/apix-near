@@ -1,0 +1,21 @@
+{
+  "name": "agent-shop",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build"
+  },
+  "dependencies": {
+    "next": "15.5.29",
+    "react": "19.1.0",
+    "react-dom": "19.1.0",
+    "openai": "^5.0.0",
+    "near-api-js": "^7.5.3",
+    "server-only": "^0.0.1"
+  },
+  "devDependencies": {
+    "typescript": "^5",
+    "@types/react": "^19",
+    "@types/node": "^22"
+  }
+}
