@@ -27,16 +27,17 @@ jobs:
         run: curl --proto '=https' --tlsv1.2 -LsSf https://github.com/near/cargo-near/releases/latest/download/cargo-near-installer.sh | sh
       - name: Test
         run: |
-          for c in agent-vault attestations; do
+          for c in agent-vault attestations fungible-token; do
             (cd contracts/$c && cargo test --quiet)
           done
       - name: Build wasm
         run: |
-          for c in agent-vault attestations; do
+          for c in agent-vault attestations fungible-token; do
             (cd contracts/$c && cargo near build non-reproducible-wasm --no-abi)
           done
           cp contracts/agent-vault/target/near/agent_vault.wasm contracts/res/
           cp contracts/attestations/target/near/apix_attestations.wasm contracts/res/
+          cp contracts/fungible-token/target/near/apix_fungible_token.wasm contracts/res/
           (cd contracts/res && sha256sum *.wasm | tee SHA256SUMS)
       - uses: actions/upload-artifact@v4
         with:

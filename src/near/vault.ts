@@ -10,17 +10,19 @@ export const AGENT_METHODS = ['pay', 'request_approval'];
 /** Gas allowance of the agent key, matches AGENT_KEY_ALLOWANCE in the contract */
 export const AGENT_KEY_ALLOWANCE = 250_000_000_000_000_000_000_000n; // 0.25 NEAR
 
-export function contractWasmPath(name: 'agent_vault' | 'apix_attestations'): string {
+export type ContractName = 'agent_vault' | 'apix_attestations' | 'apix_fungible_token';
+
+export function contractWasmPath(name: ContractName): string {
   // dist/near/vault.js and src/near/vault.ts both sit two levels below the package root
   return path.join(__dirname, '..', '..', 'contracts', 'res', `${name}.wasm`);
 }
 
-export async function loadWasm(name: 'agent_vault' | 'apix_attestations'): Promise<Uint8Array> {
+export async function loadWasm(name: ContractName): Promise<Uint8Array> {
   const file = contractWasmPath(name);
   if (!await fs.pathExists(file)) {
     throw new Error(
       `${name}.wasm not found at ${file}.\n` +
-      'Build it with: cd contracts/' + (name === 'agent_vault' ? 'agent-vault' : 'attestations') +
+      'Build it with: cd contracts/' + ({ agent_vault: 'agent-vault', apix_attestations: 'attestations', apix_fungible_token: 'fungible-token' })[name] +
       ' && cargo near build non-reproducible-wasm, then copy target/near/*.wasm to contracts/res/.'
     );
   }

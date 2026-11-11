@@ -166,7 +166,8 @@ program
   .option('-f, --force', 'Force overwrite existing files')
   .option('--create-token', 'HTS only: also create the token on Hedera (needs HEDERA_ACCOUNT_ID and HEDERA_PRIVATE_KEY)')
   .option('-y, --yes', 'Skip the confirmation before spending HBAR on mainnet')
-  .option('--chain <chain>', 'hedera (default) or near; near supports: agent-wallet')
+  .option('--chain <chain>', 'hedera (default) or near; near supports: wallet, token, agent-wallet')
+  .option('--no-verify', 'NEAR only: skip the automatic verify after adding')
   .option('--no-install', 'NEAR only: write the files without installing dependencies')
   .action(async (rawIntegration, options) => {
     if (options.chain === 'near') {

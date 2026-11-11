@@ -19,7 +19,8 @@ import { printReport, reportHash } from '../verify/report';
 import { VerifyReport } from '../verify/types';
 import { attestReport, readAttestation, deployAttestations } from '../near/attest';
 import { ATTESTATION_CONTRACT } from '../near/config';
-import { addAgentWallet } from '../near/agent-wallet';
+import { addNear, NEAR_INTEGRATIONS, NearIntegration } from '../near/generator';
+import { createToken, sendToken } from '../near/token';
 
 async function confirmNearMainnet(network: NearNetwork, yes?: boolean): Promise<void> {
   if (network !== 'mainnet' || yes) return;
@@ -60,30 +61,37 @@ async function agentKeyFrom(options: { envFile?: string }): Promise<{ key: KeyPa
   return { key: key as KeyPairString, vault: process.env.NEAR_VAULT_ID ?? env.NEAR_VAULT_ID };
 }
 
-export async function runAddNear(integration: string, options: { force?: boolean; install?: boolean }): Promise<void> {
+export async function runAddNear(integration: string, options: { force?: boolean; install?: boolean; verify?: boolean }): Promise<void> {
   try {
-    if (integration !== 'agent-wallet') {
-      throw new Error(`On NEAR, apix add supports: agent-wallet (got "${integration}").`);
+    if (!(NEAR_INTEGRATIONS as readonly string[]).includes(integration)) {
+      throw new Error(`On NEAR, apix add supports: ${NEAR_INTEGRATIONS.join(', ')} (got "${integration}").`);
     }
     const root = process.cwd();
-    const result = await addAgentWallet(root, { force: options.force, install: options.install });
-    console.log(chalk.green(`✅ Agent wallet added (${result.written.length} files written, ${result.unchanged.length} unchanged)`));
+    const result = await addNear(root, integration as NearIntegration, { force: options.force, install: options.install });
+    console.log(chalk.green(`✅ NEAR ${integration} added (${result.written.length} files written, ${result.unchanged.length} unchanged)`));
     for (const file of result.written) console.log(`   + ${file}`);
     for (const file of result.overwritten) console.log(chalk.yellow(`   ~ ${file} (overwritten)`));
     if (result.installed.length) console.log(`   Installed ${result.installed.join(', ')}`);
     if (result.envUpdated) console.log('   Generated APIX_AGENT_API_SECRET in .env.local (protects POST /api/agent/pay)');
-    const env = await readEnv(path.join(root, '.env.local'));
+
+    // Build, then verify: every add ends with the same checks apix verify runs
+    if (options.verify !== false) {
+      const report = await verifyNearProject({ directory: root, network: resolveNetwork(), offline: true, apixVersion: 'add' });
+      const blocking = report.findings.filter(f => f.severity !== 'info' && f.rule !== 'NEAR-NOTHING-TO-CHECK');
+      console.log('');
+      if (blocking.length === 0) {
+        console.log(chalk.green(`🔎 Verified: the project passes ${report.summary.checksRun} code checks.`));
+      } else {
+        console.log(chalk.yellow(`🔎 Verified: ${blocking.length} finding(s) in the project (these may predate this add):`));
+        for (const f of blocking) console.log(`   ${f.severity === 'fail' ? chalk.red('FAIL') : chalk.yellow('WARN')} ${f.title}${f.file ? chalk.gray(` ${f.file}`) : ''}`);
+        console.log(chalk.gray('   Details and fixes: apix verify'));
+      }
+    }
+
     console.log('');
     console.log(chalk.bold('Next steps'));
-    if (!env.NEAR_VAULT_ID) {
-      console.log('  1. Create the vault (writes NEAR_VAULT_ID and the agent key to .env.local):');
-      console.log('     apix near vault create --account <you>.testnet --allow <receiver>.testnet --per-tx 0.5 --daily 2');
-    } else {
-      console.log(`  1. Vault already configured: ${env.NEAR_VAULT_ID}`);
-    }
-    console.log('  2. Give your model the tools: import { openAiTools, anthropicTools, runVaultTool } from lib/near/agent-tools');
-    console.log('  3. Show limits in your UI: <AgentVaultStatus /> from components/near/AgentVaultStatus');
-    console.log('  4. Check the result: apix verify');
+    result.nextSteps.forEach((step, i) => console.log(`  ${i + 1}. ${step}`));
+    console.log(`  ${result.nextSteps.length + 1}. Before launch: apix verify (adds the on-chain checks), then apix attest`);
     process.exit(0);
   } catch (error) {
     console.error(chalk.red(`❌ ${maskSecrets(error instanceof Error ? error.message : String(error))}`));
@@ -232,6 +240,56 @@ export function registerNearCommands(program: Command, apixVersion: string): voi
       console.log(chalk.gray(`   ${formatNear(fund)} NEAR moved in for its storage. No access keys: nobody can change the code or the records.`));
       console.log(`   Use it with --contract ${contractId}, or set APIX_ATTESTATION_CONTRACT_${network.toUpperCase()}=${contractId}`);
       console.log(chalk.gray(`   ${txUrl(network, txHash)}`));
+    }));
+
+  const token = near.command('token').description('Fixed-supply NEP-141 tokens');
+
+  token
+    .command('create')
+    .description('Deploy a NEP-141 token: the whole supply goes to you, and the token account is locked (no mint, no upgrade)')
+    .requiredOption('--account <owner>', 'Account that receives the supply and pays for deployment')
+    .requiredOption('--name <name>', 'Token name, e.g. "Coffee Points"')
+    .requiredOption('--symbol <symbol>', 'Ticker, 1-16 letters or digits')
+    .option('--supply <amount>', 'Total supply in whole tokens', '1000000')
+    .option('--decimals <n>', 'Decimals', '2')
+    .option('--account-name <name>', 'Sub-account for the token: <name>.<owner> (default: lowercase symbol)')
+    .option('--env-file <file>', 'Also write NEXT_PUBLIC_NEAR_TOKEN_ID to this file')
+    .option('--network <network>', 'testnet or mainnet')
+    .option('-y, --yes', 'Skip the mainnet confirmation')
+    .action(run(async (options) => {
+      const network = resolveNetwork(options.network);
+      const credentials = await loadCredentials(network, options.account);
+      await confirmNearMainnet(network, options.yes);
+      const accountName = options.accountName ?? String(options.symbol).toLowerCase();
+      const result = await createToken(accountFor(network, credentials), {
+        name: options.name, symbol: options.symbol, decimals: Number(options.decimals), supply: options.supply, accountName,
+      });
+      console.log(chalk.green(`✅ Token ${options.symbol} deployed: ${result.tokenId}`));
+      console.log(`   Supply ${options.supply} ${options.symbol} (${result.units} units, ${options.decimals} decimals), all held by ${credentials.accountId}`);
+      console.log(`   Locked: no access key on ${result.tokenId}, so no one can mint more or change the code.`);
+      console.log(chalk.gray(`   ${formatNear(result.funded)} NEAR moved in for storage · ${txUrl(network, result.txHash)}`));
+      if (options.envFile) {
+        await upsertEnv(path.resolve(options.envFile), { NEXT_PUBLIC_NEAR_NETWORK: network, NEXT_PUBLIC_NEAR_TOKEN_ID: result.tokenId });
+        console.log(`   NEXT_PUBLIC_NEAR_TOKEN_ID written to ${options.envFile}`);
+      }
+    }));
+
+  token
+    .command('send <token>')
+    .description('Send tokens from your account; registers the receiver first if needed (NEP-145)')
+    .requiredOption('--account <sender>', 'Sending account')
+    .requiredOption('--to <account>', 'Receiver')
+    .requiredOption('--amount <amount>', 'Amount in whole tokens, e.g. 12.5')
+    .option('--memo <memo>', 'Memo')
+    .option('--network <network>', 'testnet or mainnet')
+    .option('-y, --yes', 'Skip the mainnet confirmation')
+    .action(run(async (tokenId: string, options) => {
+      const network = resolveNetwork(options.network);
+      const credentials = await loadCredentials(network, options.account);
+      await confirmNearMainnet(network, options.yes);
+      const result = await sendToken(network, accountFor(network, credentials), tokenId, options.to, options.amount, options.memo);
+      console.log(chalk.green(`✅ Sent ${options.amount} to ${options.to}${result.registered ? ' (registered it with the token first)' : ''}`));
+      console.log(chalk.gray(`   ${txUrl(network, result.txHash)}`));
     }));
 
   const vault = near.command('vault').description('Create and manage Agent Vaults');
