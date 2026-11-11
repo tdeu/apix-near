@@ -68,10 +68,13 @@ export async function readAttestation(
  * in one transaction, with no access key at all: the code and the records can
  * never be changed by anyone, the deployer included.
  */
-export async function deployAttestations(owner: Account, name: string, fund: bigint): Promise<{ contractId: string; txHash: string }> {
+export async function deployAttestations(owner: Account, name: string): Promise<{ contractId: string; txHash: string; fund: bigint }> {
   const contractId = `${name}.${owner.accountId}`;
   if (!isValidAccountId(contractId)) throw new Error(`"${contractId}" is not a valid account id.`);
   const wasm = await loadWasm('apix_attestations');
+  // Storage for the code and the initial state, plus 0.05 NEAR headroom.
+  // Each attestation pays its own storage, so this never needs topping up.
+  const fund = (BigInt(wasm.length) + 2_000n) * 10_000_000_000_000_000_000n + 50_000_000_000_000_000_000_000n;
   const result = await owner.signAndSendTransaction({
     receiverId: contractId,
     actions: [
@@ -82,5 +85,5 @@ export async function deployAttestations(owner: Account, name: string, fund: big
     ],
     waitUntil: 'FINAL',
   });
-  return { contractId, txHash: result.transaction.hash };
+  return { contractId, txHash: result.transaction.hash, fund };
 }

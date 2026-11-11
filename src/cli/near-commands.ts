@@ -221,15 +221,15 @@ export function registerNearCommands(program: Command, apixVersion: string): voi
     .description('Deploy your own attestation contract, locked (no access keys: nobody can change it)')
     .requiredOption('--account <owner>', 'Account that pays for the deployment')
     .option('--name <name>', 'Sub-account name: <name>.<owner>', 'attest')
-    .option('--fund <near>', 'NEAR for the contract\'s storage', '2')
     .option('--network <network>', 'testnet or mainnet')
     .option('-y, --yes', 'Skip the mainnet confirmation')
     .action(run(async (options) => {
       const network = resolveNetwork(options.network);
       const credentials = await loadCredentials(network, options.account);
       await confirmNearMainnet(network, options.yes);
-      const { contractId, txHash } = await deployAttestations(accountFor(network, credentials), options.name, parseNear(options.fund, '--fund'));
+      const { contractId, txHash, fund } = await deployAttestations(accountFor(network, credentials), options.name);
       console.log(chalk.green(`✅ Attestation contract deployed and locked: ${contractId}`));
+      console.log(chalk.gray(`   ${formatNear(fund)} NEAR moved in for its storage. No access keys: nobody can change the code or the records.`));
       console.log(`   Use it with --contract ${contractId}, or set APIX_ATTESTATION_CONTRACT_${network.toUpperCase()}=${contractId}`);
       console.log(chalk.gray(`   ${txUrl(network, txHash)}`));
     }));
@@ -244,7 +244,7 @@ export function registerNearCommands(program: Command, apixVersion: string): voi
     .option('--per-tx <near>', 'Largest single payment the agent can make, in NEAR', '0.5')
     .option('--daily <near>', 'Most the agent can spend per 24h, in NEAR', '2')
     .option('--allow <accounts>', 'Comma-separated receivers the agent may pay', '')
-    .option('--fund <near>', 'NEAR to move from the owner into the vault', '3')
+    .option('--fund <near>', 'NEAR the agent can spend (storage and gas reserve, ~2.2 NEAR, are added on top)', '3')
     .option('--env-file <file>', 'Where to write the agent key (must be gitignored)', '.env.local')
     .option('--network <network>', 'testnet or mainnet (default NEAR_NETWORK or testnet)')
     .option('-y, --yes', 'Skip the mainnet confirmation')
@@ -276,7 +276,8 @@ export function registerNearCommands(program: Command, apixVersion: string): voi
       });
 
       console.log(chalk.green(`✅ Vault created: ${result.vaultId}`));
-      console.log(`   Per transaction ${formatNear(perTxLimit)} NEAR · daily ${formatNear(dailyLimit)} NEAR · funded ${formatNear(fund)} NEAR`);
+      console.log(`   Per transaction ${formatNear(perTxLimit)} NEAR · daily ${formatNear(dailyLimit)} NEAR · spendable ${formatNear(fund)} NEAR`);
+      console.log(chalk.gray(`   Moved ${formatNear(result.transferred)} NEAR: ${formatNear(fund)} to spend + ${formatNear(result.overhead)} for contract storage and gas reserve (stays locked in the vault)`));
       console.log(`   Allowlist: ${allowlist.join(', ')}`);
       console.log(`   Agent key: ${result.agentPublicKey} (function-call only: pay, request_approval)`);
       console.log(`   Agent private key written to ${options.envFile} (${maskKey(result.agentPrivateKey)})`);

@@ -5,8 +5,8 @@
 #
 # Needs: npm run build done, and the owner's key either in
 # ~/.near-credentials/testnet/<owner>.testnet.json (near-cli) or in
-# NEAR_ACCOUNT_ID + NEAR_PRIVATE_KEY. Spends about 5.5 testnet NEAR
-# (3 into the vault, 2 for the attestation contract, gas).
+# NEAR_ACCOUNT_ID + NEAR_PRIVATE_KEY. Spends about 5.3 testnet NEAR
+# (1.5 spendable + 2.2 storage into the vault, 1.5 for the attestation contract, gas).
 set -uo pipefail
 
 OWNER="${1:?usage: $0 <owner>.testnet <receiver>.testnet}"
@@ -30,7 +30,7 @@ printf '.env.local\n' > .gitignore
 
 step "1. Create a vault: 0.5 NEAR per payment, 1 NEAR per day, only $RECEIVER"
 expect_code 0 $APIX near vault create --account "$OWNER" --name "$VAULT_NAME" \
-  --per-tx 0.5 --daily 1 --allow "$RECEIVER" --fund 3
+  --per-tx 0.5 --daily 1 --allow "$RECEIVER" --fund 1.5
 VAULT="$VAULT_NAME.$OWNER"
 
 step "2. Status: note there is no full-access key on the vault"

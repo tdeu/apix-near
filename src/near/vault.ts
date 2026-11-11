@@ -33,8 +33,23 @@ export interface VaultPolicyInput {
   allowlist: string[];
 }
 
+/** NEAR charges 1e19 yocto per byte of account storage (1 NEAR per 100 kB) */
+export const STORAGE_PRICE_PER_BYTE = 10_000_000_000_000_000_000n;
+/** Keys, state and account record on top of the code, with headroom */
+const STATE_HEADROOM_BYTES = 5_000n;
+/** Matches GAS_RESERVE in the contract, plus room for the agent key's gas */
+const OPERATING_RESERVE = 150_000_000_000_000_000_000_000n; // 0.15 NEAR
+
+/** What must be sent on top of the spendable amount: storage for the code and state, and a gas reserve */
+export function vaultOverhead(wasmBytes: number): bigint {
+  return (BigInt(wasmBytes) + STATE_HEADROOM_BYTES) * STORAGE_PRICE_PER_BYTE + OPERATING_RESERVE;
+}
+
 export interface CreateVaultResult {
   vaultId: string;
+  /** Total NEAR moved into the vault (spendable + overhead) */
+  transferred: bigint;
+  overhead: bigint;
   txHash: string;
   agentPublicKey: string;
   agentPrivateKey: KeyPairString;
@@ -62,6 +77,9 @@ export async function createVault(
   }
 
   const wasm = await loadWasm('agent_vault');
+  // --fund is what the agent can spend; storage and gas reserve come on top
+  const overhead = vaultOverhead(wasm.length);
+  const transferred = options.fund + overhead;
   const agentKey = KeyPair.fromRandom('ed25519');
   const agentPublicKey = agentKey.getPublicKey();
 
@@ -69,7 +87,7 @@ export async function createVault(
     receiverId: vaultId,
     actions: [
       actions.createAccount(),
-      actions.transfer(options.fund),
+      actions.transfer(transferred),
       actions.deployContract(wasm),
       actions.functionCall(
         'new',
@@ -90,6 +108,8 @@ export async function createVault(
 
   return {
     vaultId,
+    transferred,
+    overhead,
     txHash: result.transaction.hash,
     agentPublicKey: agentPublicKey.toString(),
     agentPrivateKey: agentKey.toString() as KeyPairString,
