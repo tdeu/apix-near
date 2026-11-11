@@ -102,6 +102,7 @@
     "fuzzysort": "^3.1.0",
     "handlebars": "^4.7.10",
     "inquirer": "^9.2.12",
+    "near-api-js": "^7.5.3",
     "openai": "^4.0.0",
     "ora": "^5.4.1",
     "uuid": "^11.1.1",

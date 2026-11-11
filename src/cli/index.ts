@@ -12,6 +12,7 @@ import { maskSecrets } from '../utils/secrets';
 import { logger, LogLevel } from '../utils/logger';
 import { debugLogger, LogLevel as DebugLogLevel } from '../utils/debug-logger';
 import { formatter, createFormatter } from '../utils/output-formatter';
+import { registerNearCommands } from './near-commands';
 
 const packageJson = require('../../package.json');
 
@@ -655,6 +656,8 @@ program
       process.exit(1);
     }
   });
+
+registerNearCommands(program);
 
 program.showHelpAfterError();
 
