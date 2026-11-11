@@ -58,7 +58,7 @@ expect_code 0 $APIX near vault unpause "$VAULT" --account "$OWNER"
 
 step "9. The agent key itself cannot touch the policy (direct contract call, expect failure)"
 node -e "
-const { Account, JsonRpcProvider } = require('near-api-js');
+const { Account, JsonRpcProvider } = require('$ROOT/node_modules/near-api-js');
 const env = Object.fromEntries(require('fs').readFileSync('.env.local','utf8').split('\n').filter(Boolean).map(l => l.split(/=(.*)/s)));
 const agent = new Account(env.NEAR_VAULT_ID, new JsonRpcProvider({ url: 'https://rpc.testnet.near.org' }), env.NEAR_AGENT_PRIVATE_KEY);
 agent.callFunction({ contractId: env.NEAR_VAULT_ID, methodName: 'set_limits', args: { per_tx_limit: '1', daily_limit: '1' } })
