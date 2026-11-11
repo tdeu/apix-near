@@ -1,5 +1,7 @@
 // src/near/attest.ts
-import { Account, teraToGas } from 'near-api-js';
+import { Account, actions, teraToGas } from 'near-api-js';
+import { loadWasm } from './vault';
+import { isValidAccountId } from './network';
 import { VerifyReport } from '../verify/types';
 import { reportHash } from '../verify/report';
 import { NearNetwork, provider } from './config';
@@ -59,4 +61,26 @@ export async function readAttestation(
     args: { attester, app_id: appId },
   });
   return (value as OnChainAttestation | undefined) ?? null;
+}
+
+/**
+ * Creates <name>.<owner>, deploys the attestation contract and initialises it
+ * in one transaction, with no access key at all: the code and the records can
+ * never be changed by anyone, the deployer included.
+ */
+export async function deployAttestations(owner: Account, name: string, fund: bigint): Promise<{ contractId: string; txHash: string }> {
+  const contractId = `${name}.${owner.accountId}`;
+  if (!isValidAccountId(contractId)) throw new Error(`"${contractId}" is not a valid account id.`);
+  const wasm = await loadWasm('apix_attestations');
+  const result = await owner.signAndSendTransaction({
+    receiverId: contractId,
+    actions: [
+      actions.createAccount(),
+      actions.transfer(fund),
+      actions.deployContract(wasm),
+      actions.functionCall('new', {}, teraToGas('30'), 0n),
+    ],
+    waitUntil: 'FINAL',
+  });
+  return { contractId, txHash: result.transaction.hash };
 }

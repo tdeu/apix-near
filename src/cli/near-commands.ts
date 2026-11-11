@@ -17,7 +17,7 @@ import fs from 'fs-extra';
 import { verifyNearProject } from '../verify';
 import { printReport, reportHash } from '../verify/report';
 import { VerifyReport } from '../verify/types';
-import { attestReport, readAttestation } from '../near/attest';
+import { attestReport, readAttestation, deployAttestations } from '../near/attest';
 import { ATTESTATION_CONTRACT } from '../near/config';
 import { addAgentWallet } from '../near/agent-wallet';
 
@@ -178,6 +178,24 @@ export function registerNearCommands(program: Command, apixVersion: string): voi
   const near = program
     .command('near')
     .description('NEAR: give an AI agent a spending-limited vault (Agent Vault)');
+
+  near
+    .command('deploy-attestations')
+    .description('Deploy your own attestation contract, locked (no access keys: nobody can change it)')
+    .requiredOption('--account <owner>', 'Account that pays for the deployment')
+    .option('--name <name>', 'Sub-account name: <name>.<owner>', 'attest')
+    .option('--fund <near>', 'NEAR for the contract\'s storage', '2')
+    .option('--network <network>', 'testnet or mainnet')
+    .option('-y, --yes', 'Skip the mainnet confirmation')
+    .action(run(async (options) => {
+      const network = resolveNetwork(options.network);
+      const credentials = await loadCredentials(network, options.account);
+      await confirmNearMainnet(network, options.yes);
+      const { contractId, txHash } = await deployAttestations(accountFor(network, credentials), options.name, parseNear(options.fund, '--fund'));
+      console.log(chalk.green(`✅ Attestation contract deployed and locked: ${contractId}`));
+      console.log(`   Use it with --contract ${contractId}, or set APIX_ATTESTATION_CONTRACT_${network.toUpperCase()}=${contractId}`);
+      console.log(chalk.gray(`   ${txUrl(network, txHash)}`));
+    }));
 
   const vault = near.command('vault').description('Create and manage Agent Vaults');
 
