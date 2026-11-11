@@ -180,6 +180,14 @@ export function runNearStaticRules(project: ProjectFiles): RuleOutput {
       const scope = withImports(route, project.files);
       const signer = scope.find(signs);
       if (!signer) continue;
+      // A route only counts when it can trigger the signing: it signs itself,
+      // handles a mutating method, or calls something that pays/sends
+      const mutating = /export\s+(async\s+)?(function|const)\s+(POST|PUT|PATCH|DELETE)\b/.test(route.content)
+        || /\b(app|router)\.(post|put|patch|delete|all)\s*\(/.test(route.content)
+        || /req\.method\s*===?\s*['"](POST|PUT|PATCH|DELETE)['"]/.test(route.content);
+      const triggers = SIGNING_RE.test(route.content)
+        || /\b(pay|send|transfer|tip|withdraw|mint|swap|bridge)\w*\s*\(/i.test(route.content.replace(/\bimport[^;]+;/g, ''));
+      if (!mutating && !triggers) continue;
       spendingRoutes.push(route);
       const guarded = scope.some(f => AUTH_RE.test(f.content));
       if (!guarded) {
@@ -229,7 +237,8 @@ export function runNearStaticRules(project: ProjectFiles): RuleOutput {
   {
     const found: Finding[] = [];
     for (const file of code.filter(f => signs(f))) {
-      const m = /networkId\s*:\s*['"]mainnet['"]|rpc\.mainnet\.near\.org|mainnet\.fastnear\.com/.exec(file.content);
+      // Flags a mainnet endpoint used directly, not a lookup table keyed by network
+      const m = /networkId\s*:\s*['"]mainnet['"]|url\s*:\s*['"]https:\/\/(rpc\.mainnet\.near\.org|[a-z.]*mainnet[a-z.]*fastnear\.com)|JsonRpcProvider\(\s*\{?\s*(url\s*:\s*)?['"]https:\/\/[^'"]*mainnet/.exec(file.content);
       if (m) {
         found.push({
           rule: 'NEAR-MAINNET-HARDCODED', severity: 'warn',

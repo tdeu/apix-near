@@ -100,6 +100,22 @@ describe('apix verify --chain near (code checks)', () => {
       .toEqual(['NEAR-MAINNET-HARDCODED:warn']);
   });
 
+  it('does not treat a read-only GET route as a spender', async () => {
+    const dir = await project({
+      'package.json': pkg,
+      'lib/near.ts': NEAR_LIB + 'export async function getBalance() { return 1; }\n',
+      'app/api/balance/route.ts': `import { getBalance } from '../../../lib/near';\nexport async function GET() { return Response.json(await getBalance()); }\n`,
+    });
+    expect(rules(await verifyNearProject({ directory: dir, network: 'testnet', offline: true, apixVersion: 'test' }))).toEqual([]);
+  });
+
+  it('does not flag a network lookup table as hardcoded mainnet', async () => {
+    const lib = NEAR_LIB.replace("process.env.NEAR_RPC!", "RPC[process.env.NEAR_NETWORK ?? 'testnet']")
+      .replace('const provider', "const RPC: Record<string, string> = { testnet: 'https://rpc.testnet.near.org', mainnet: 'https://rpc.mainnet.near.org' };\nconst provider");
+    const dir = await project({ 'package.json': pkg, 'lib/near.ts': lib });
+    expect(rules(await verifyNearProject({ directory: dir, network: 'testnet', offline: true, apixVersion: 'test' }))).toEqual([]);
+  });
+
   it('skips NEAR-only checks for projects without NEAR code', async () => {
     const dir = await project({ 'package.json': JSON.stringify({ name: 'plain' }), 'index.ts': 'export const a = 1;\n' });
     const report = await verifyNearProject({ directory: dir, network: 'testnet', offline: true, apixVersion: 'test' });

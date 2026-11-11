@@ -12,7 +12,7 @@ import { maskSecrets } from '../utils/secrets';
 import { logger, LogLevel } from '../utils/logger';
 import { debugLogger, LogLevel as DebugLogLevel } from '../utils/debug-logger';
 import { formatter, createFormatter } from '../utils/output-formatter';
-import { registerNearCommands } from './near-commands';
+import { registerNearCommands, runAddNear } from './near-commands';
 
 const packageJson = require('../../package.json');
 
@@ -166,7 +166,13 @@ program
   .option('-f, --force', 'Force overwrite existing files')
   .option('--create-token', 'HTS only: also create the token on Hedera (needs HEDERA_ACCOUNT_ID and HEDERA_PRIVATE_KEY)')
   .option('-y, --yes', 'Skip the confirmation before spending HBAR on mainnet')
+  .option('--chain <chain>', 'hedera (default) or near; near supports: agent-wallet')
+  .option('--no-install', 'NEAR only: write the files without installing dependencies')
   .action(async (rawIntegration, options) => {
+    if (options.chain === 'near') {
+      await runAddNear(rawIntegration, options);
+      return;
+    }
     // The one place aliases (hcs, contract) become canonical names
     const integration = normalizeIntegration(rawIntegration);
     const globalOptions = program.opts();

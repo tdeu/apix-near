@@ -19,6 +19,7 @@ import { printReport, reportHash } from '../verify/report';
 import { VerifyReport } from '../verify/types';
 import { attestReport, readAttestation } from '../near/attest';
 import { ATTESTATION_CONTRACT } from '../near/config';
+import { addAgentWallet } from '../near/agent-wallet';
 
 async function confirmNearMainnet(network: NearNetwork, yes?: boolean): Promise<void> {
   if (network !== 'mainnet' || yes) return;
@@ -57,6 +58,37 @@ async function agentKeyFrom(options: { envFile?: string }): Promise<{ key: KeyPa
     throw new Error('No agent key. Set NEAR_AGENT_PRIVATE_KEY, or pass --env-file pointing at the file `apix near vault create` wrote.');
   }
   return { key: key as KeyPairString, vault: process.env.NEAR_VAULT_ID ?? env.NEAR_VAULT_ID };
+}
+
+export async function runAddNear(integration: string, options: { force?: boolean; install?: boolean }): Promise<void> {
+  try {
+    if (integration !== 'agent-wallet') {
+      throw new Error(`On NEAR, apix add supports: agent-wallet (got "${integration}").`);
+    }
+    const root = process.cwd();
+    const result = await addAgentWallet(root, { force: options.force, install: options.install });
+    console.log(chalk.green(`✅ Agent wallet added (${result.written.length} files written, ${result.unchanged.length} unchanged)`));
+    for (const file of result.written) console.log(`   + ${file}`);
+    for (const file of result.overwritten) console.log(chalk.yellow(`   ~ ${file} (overwritten)`));
+    if (result.installed.length) console.log(`   Installed ${result.installed.join(', ')}`);
+    if (result.envUpdated) console.log('   Generated APIX_AGENT_API_SECRET in .env.local (protects POST /api/agent/pay)');
+    const env = await readEnv(path.join(root, '.env.local'));
+    console.log('');
+    console.log(chalk.bold('Next steps'));
+    if (!env.NEAR_VAULT_ID) {
+      console.log('  1. Create the vault (writes NEAR_VAULT_ID and the agent key to .env.local):');
+      console.log('     apix near vault create --account <you>.testnet --allow <receiver>.testnet --per-tx 0.5 --daily 2');
+    } else {
+      console.log(`  1. Vault already configured: ${env.NEAR_VAULT_ID}`);
+    }
+    console.log('  2. Give your model the tools: import { openAiTools, anthropicTools, runVaultTool } from lib/near/agent-tools');
+    console.log('  3. Show limits in your UI: <AgentVaultStatus /> from components/near/AgentVaultStatus');
+    console.log('  4. Check the result: apix verify');
+    process.exit(0);
+  } catch (error) {
+    console.error(chalk.red(`❌ ${maskSecrets(error instanceof Error ? error.message : String(error))}`));
+    process.exit(1);
+  }
 }
 
 export function registerNearCommands(program: Command, apixVersion: string): void {
