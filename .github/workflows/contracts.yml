@@ -1,0 +1,51 @@
+name: contracts
+
+# Tests the NEAR contracts and builds their wasm with cargo-near.
+# On main, the built wasm is committed to contracts/res/ so the CLI can
+# deploy it without a Rust toolchain on the user's machine.
+
+on:
+  push:
+    branches: [main]
+    paths: ['contracts/**', '.github/workflows/contracts.yml']
+  pull_request:
+    paths: ['contracts/**']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - name: Install cargo-near
+        run: curl --proto '=https' --tlsv1.2 -LsSf https://github.com/near/cargo-near/releases/latest/download/cargo-near-installer.sh | sh
+      - name: Test
+        run: |
+          for c in agent-vault attestations; do
+            (cd contracts/$c && cargo test --quiet)
+          done
+      - name: Build wasm
+        run: |
+          for c in agent-vault attestations; do
+            (cd contracts/$c && cargo near build non-reproducible-wasm --no-abi)
+          done
+          cp contracts/agent-vault/target/near/agent_vault.wasm contracts/res/
+          cp contracts/attestations/target/near/apix_attestations.wasm contracts/res/
+          (cd contracts/res && sha256sum *.wasm | tee SHA256SUMS)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: contracts-wasm
+          path: contracts/res/
+      - name: Commit wasm
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add contracts/res
+          git diff --cached --quiet || (git commit -m "build(contracts): wasm from ${GITHUB_SHA::7} [skip ci]" && git push)
