@@ -15,7 +15,7 @@ const EXPLORER: Record<NearNetwork, string> = {
 
 /** Contracts APIX deploys or calls, by network */
 export const ATTESTATION_CONTRACT: Record<NearNetwork, string | undefined> = {
-  testnet: process.env.APIX_ATTESTATION_CONTRACT_TESTNET ?? 'attest.apix-near.testnet',
+  testnet: process.env.APIX_ATTESTATION_CONTRACT_TESTNET ?? 'attest-163736.tomapix.testnet',
   mainnet: process.env.APIX_ATTESTATION_CONTRACT_MAINNET,
 };
 

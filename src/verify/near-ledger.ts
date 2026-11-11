@@ -25,6 +25,15 @@ export const jsonRpc: Rpc = async (network, method, params) => {
     err.rpcName = name;
     throw err;
   }
+  // Some query kinds (view_access_key, older nodes) report failure as a
+  // string inside a successful result: {"result": {"error": "... does not exist ..."}}
+  if (body.result && typeof body.result.error === 'string') {
+    const text: string = body.result.error;
+    const err = new Error(text) as Error & { rpcName?: string };
+    err.rpcName = /access key .* does not exist/i.test(text) ? 'UNKNOWN_ACCESS_KEY'
+      : /account .* does not exist/i.test(text) ? 'UNKNOWN_ACCOUNT' : 'QUERY_ERROR';
+    throw err;
+  }
   return body.result;
 };
 

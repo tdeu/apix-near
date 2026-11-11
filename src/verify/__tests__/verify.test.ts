@@ -172,6 +172,21 @@ describe('apix verify --chain near (ledger checks, mocked RPC)', () => {
   });
 });
 
+describe('jsonRpc', () => {
+  const realFetch = global.fetch;
+  afterEach(() => { global.fetch = realFetch; });
+
+  it('turns an error hidden inside a successful query result into an error', async () => {
+    // Found on testnet: view_access_key answers 200 with {result: {error: "..."}}
+    global.fetch = jest.fn(async () => ({
+      ok: true,
+      json: async () => ({ result: { error: 'access key ed25519:abc does not exist while viewing', block_height: 1 } }),
+    })) as any;
+    const { jsonRpc } = await import('../near-ledger');
+    await expect(jsonRpc('testnet', 'query', {})).rejects.toMatchObject({ rpcName: 'UNKNOWN_ACCESS_KEY' });
+  });
+});
+
 describe('report hashing', () => {
   it('is independent of key order', () => {
     expect(canonicalJson({ b: 1, a: { d: [2, 1], c: null } })).toBe('{"a":{"c":null,"d":[2,1]},"b":1}');
