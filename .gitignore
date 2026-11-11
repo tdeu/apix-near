@@ -53,3 +53,6 @@ note.md
 
 # Staged by prepack from npm-shrinkwrap.release.json, removed by postpack
 /npm-shrinkwrap.json
+
+# Rust contract builds
+contracts/*/target/
