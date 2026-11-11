@@ -40,7 +40,8 @@ function config() {
   return { network, vaultId, agentKey: agentKey as KeyPairString, provider };
 }
 
-const YOCTO = 10n ** 24n;
+// No bigint literals (10n): Next.js projects default to an ES2017 TypeScript target
+const YOCTO = BigInt('1000000000000000000000000');
 
 /** "0.25" NEAR -> yoctoNEAR, refusing anything that isn't a plain positive amount */
 export function parseNear(amount: string | number): bigint {
@@ -92,10 +93,11 @@ export async function payFromVault(input: { to: string; amountNear: string | num
   const { provider, vaultId, agentKey } = config();
   const amount = parseNear(input.amountNear);
   const args = { receiver_id: input.to, amount: amount.toString() };
-  const reason = await provider.callFunction<string | null>({ contractId: vaultId, method: 'check_payment', args });
+  // check_payment returns null when the payment would go through, or the reason it wouldn't
+  const reason = (await provider.callFunction<string>({ contractId: vaultId, method: 'check_payment', args })) ?? null;
   const agent = new Account(vaultId, provider, agentKey);
 
-  if (reason === null || reason === undefined) {
+  if (reason === null) {
     const result = await agent.callFunctionRaw({
       contractId: vaultId,
       methodName: 'pay',
@@ -106,8 +108,8 @@ export async function payFromVault(input: { to: string; amountNear: string | num
     return { status: 'paid', txHash: result.transaction.hash };
   }
 
-  const amountProblem = /per-transaction limit|daily limit/.test(reason as string);
-  if (!input.escalate || !amountProblem) return { status: 'refused', reason: reason as string };
+  const amountProblem = /per-transaction limit|daily limit/.test(reason);
+  if (!input.escalate || !amountProblem) return { status: 'refused', reason };
 
   const result = await agent.callFunctionRaw({
     contractId: vaultId,
@@ -118,7 +120,7 @@ export async function payFromVault(input: { to: string; amountNear: string | num
   });
   const raw = (result.status as { SuccessValue?: string }).SuccessValue ?? '';
   const requestId = Number(JSON.parse(Buffer.from(raw, 'base64').toString() || '0'));
-  return { status: 'pending_approval', requestId, reason: reason as string, txHash: result.transaction.hash };
+  return { status: 'pending_approval', requestId, reason, txHash: result.transaction.hash };
 }
 `;
 }
@@ -262,7 +264,8 @@ interface Status {
   error?: string;
 }
 
-const near = (yocto: string) => (Number(BigInt(yocto) / 10n ** 19n) / 1e5).toString();
+// NEAR with up to 5 decimals, from a yoctoNEAR string (no bigint literals: ES2017 target)
+const near = (yocto: string) => (Number(BigInt(yocto) / BigInt('10000000000000000000')) / 1e5).toString();
 
 export function AgentVaultStatus({ refreshMs = 15000 }: { refreshMs?: number }) {
   const [status, setStatus] = useState<Status | null>(null);
