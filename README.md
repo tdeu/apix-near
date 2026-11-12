@@ -1,6 +1,6 @@
 # APIX for NEAR: build it, verify it, prove it
 
-**Built at NEAR HACKATHON (Nov 2026).** Tracks: **AI Security & Defense**, Open Innovation.
+**Built at NEAR HACKATHON (Nov 2026).** Tracks: **AI Security & Defense**, Open Innovation. Live page with on-chain data: **[apix-near-site.vercel.app](https://apix-near-site.vercel.app/)**
 
 Coding agents can now build a whole NEAR app from a prompt. The people
 using them usually can't check whether that code is safe: the app works,
