@@ -109,6 +109,28 @@ describe('apix verify --chain near (code checks)', () => {
       .toEqual(['NEAR-MAINNET-HARDCODED:warn']);
   });
 
+  it('follows the payment through several imports (route -> service -> wallet)', async () => {
+    // Shape of a real agent-built app: the route calls a service, which calls the module that signs
+    const dir = await project({
+      'package.json': pkg,
+      'lib/near.ts': NEAR_LIB,
+      'lib/contractor.ts': "import { send } from './near';\nexport async function createRun(budget: string) { return send('x.testnet', BigInt(budget)); }\nexport async function decide(id: string) { return send('x.testnet', 1n); }\n",
+      'app/api/runs/route.ts': "import { createRun } from '@/lib/contractor';\nexport async function POST(req: Request) { const { budget } = await req.json(); return Response.json(await createRun(budget)); }\n",
+      'app/api/runs/[id]/approvals/[aid]/route.ts': "import { decide } from '@/lib/contractor';\nexport async function POST(req: Request) { const { decision } = await req.json(); await decide(decision); return Response.json({ ok: true }); }\n",
+      'app/api/status/route.ts': "import { getPayer, paymentMode } from '@/lib/near';\nexport async function GET() { return Response.json({ mode: paymentMode(), payer: await getPayer() }); }\n",
+      'lib/near-extra.ts': '',
+    });
+    await fs.appendFile(path.join(dir, 'lib/near.ts'), 'export const paymentMode = () => "testnet";\nexport const getPayer = async () => account;\n');
+    const report = await verifyNearProject({ directory: dir, network: 'testnet', offline: true, apixVersion: 'test' });
+    const spend = report.findings.filter(f => f.rule === 'NEAR-UNPROTECTED-SPEND-ROUTE');
+    expect(spend.map(f => `${f.file}:${f.severity}`).sort()).toEqual([
+      'app/api/runs/[id]/approvals/[aid]/route.ts:fail',
+      'app/api/runs/route.ts:fail',
+      'app/api/runs/route.ts:warn',
+    ]);
+    expect(spend.find(f => f.file?.includes('approvals'))?.title).toMatch(/approve payments/);
+  });
+
   it('does not treat a read-only GET route as a spender', async () => {
     const dir = await project({
       'package.json': pkg,

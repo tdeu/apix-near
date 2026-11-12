@@ -169,10 +169,14 @@ const result = await runVaultTool(call.function.name, JSON.parse(call.function.a
 
 Secrets are never printed (the first 6 characters at most) and never hashed into the report.
 
+## Tested on a real agent build
+
+We gave a coding agent NEAR's official Agent Economy prompt, in an empty folder with no hints. Its app was careful on the surface, yet `apix verify` found that **anyone could start a paid run, and anyone could approve the payments meant to wait for the owner**. On the first try APIX also got four things wrong; each is now fixed and tested. Full write-up: [experiments/2026-11-12-agent-economy.md](experiments/2026-11-12-agent-economy.md).
+
 ## Honest limits
 
 - `apix verify` is a set of targeted checks, not an audit. The code checks are pattern-based, so they can miss things and occasionally misfire; each one has tests for what it should and shouldn't flag. A PASS means "none of these known mistakes were found".
-- The Agent Vault contract has unit tests and a full testnet run, but no external audit. Use testnet or small amounts.
+- The Agent Vault contract has unit tests and a full testnet run, but no external audit. Use testnet or small amounts. It pays in NEAR; paying fungible tokens (USDC) from the vault isn't built yet.
 - The generators target Next.js (App Router, TypeScript). `verify` works on any JavaScript/TypeScript project. The wallet and token panel are built and type-checked; their in-browser wallet flow depends on the wallets supporting testnet.
 - NEAR also offers hosted policy-bound agent wallets (the Agent API linked from the hackathon's Agent Economy track). APIX is complementary: it checks whatever an agent built, and its vault is a contract the owner deploys and controls.
 

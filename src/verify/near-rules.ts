@@ -50,12 +50,28 @@ function isCode(file: SourceFile): boolean {
   return /\.(tsx?|jsx?|mjs|cjs)$/.test(file.path) && !/(^|\/)(__tests__|tests?)\/|\.(test|spec)\./.test(file.path);
 }
 
-/** File plus the local modules it imports, one level deep */
+/**
+ * File plus the local modules it reaches through imports, up to a few levels
+ * deep (route -> service -> wallet module is the usual shape).
+ * Found in a real agent-built app: payment code two imports away from the
+ * route was missed when only one level was followed.
+ */
+const IMPORT_DEPTH = 4;
 function withImports(file: SourceFile, files: SourceFile[]): SourceFile[] {
   const out = [file];
-  for (const spec of importsOf(file)) {
-    const target = resolveImport(files, file.path, spec);
-    if (target && !out.includes(target)) out.push(target);
+  let frontier = [file];
+  for (let depth = 0; depth < IMPORT_DEPTH && frontier.length > 0; depth++) {
+    const next: SourceFile[] = [];
+    for (const current of frontier) {
+      for (const spec of importsOf(current)) {
+        const target = resolveImport(files, current.path, spec);
+        if (target && !out.includes(target)) {
+          out.push(target);
+          next.push(target);
+        }
+      }
+    }
+    frontier = next;
   }
   return out;
 }
@@ -199,12 +215,22 @@ export function runNearStaticRules(project: ProjectFiles): RuleOutput {
       const mutating = /export\s+(async\s+)?(function|const)\s+(POST|PUT|PATCH|DELETE)\b/.test(route.content)
         || /\b(app|router)\.(post|put|patch|delete|all)\s*\(/.test(route.content)
         || /req\.method\s*===?\s*['"](POST|PUT|PATCH|DELETE)['"]/.test(route.content);
+      // Calls named like a payment: pay(, payFromVault(, sendTip(, transferFunds( — not paymentMode( or getPayer(
       const triggers = SIGNING_RE.test(route.content)
-        || /\b(pay|send|transfer|tip|withdraw|mint|swap|bridge)\w*\s*\(/i.test(route.content.replace(/\bimport[^;]+;/g, ''));
+        || /\b(pay|send|transfer|tip|withdraw|mint|swap|bridge|approve)(?:[A-Z]\w*)?\s*\(/.test(route.content.replace(/\bimport[^;]+;/g, ''));
       if (!mutating && !triggers) continue;
       spendingRoutes.push(route);
       const guarded = scope.some(f => AUTH_RE.test(f.content));
-      if (!guarded) {
+      const approval = /approv|confirm|authori[sz]e|decid/i.test(route.path) || /\b(approve|decide|confirm)\w*\s*\(/.test(route.content);
+      if (!guarded && approval) {
+        found.push({
+          rule: 'NEAR-UNPROTECTED-SPEND-ROUTE', severity: 'fail',
+          title: 'Anyone can approve payments that were meant to wait for you',
+          detail: `${route.path} approves payments held back for a human${signer !== route ? ` (the payment runs in ${signer.path})` : ''}, and nothing checks who is calling it. Once deployed, anyone who finds the URL, or an agent told to call it, can release them.`,
+          fix: 'Check that the caller is the owner (a signed-in session, or a signed NEAR message from the owner\'s wallet) before approving. Or keep approvals on-chain: an Agent Vault only releases over-limit payments when the owner\'s account calls approve.',
+          file: route.path,
+        });
+      } else if (!guarded) {
         found.push({
           rule: 'NEAR-UNPROTECTED-SPEND-ROUTE', severity: 'fail',
           title: 'Anyone on the internet can make this route spend',
@@ -213,9 +239,9 @@ export function runNearStaticRules(project: ProjectFiles): RuleOutput {
           file: route.path,
         });
       }
-      const readsBody = /request\.json\(\)|req\.body|formData\(\)|searchParams/.test(route.content);
+      const readsBody = /\b(req|request|r)\.(json|formData|text)\(\)|req\.body|req\.query|searchParams/.test(route.content);
       const capped = scope.some(f => AMOUNT_GUARD_RE.test(f.content) || VAULT_RE.test(f.content));
-      if (readsBody && !capped) {
+      if (readsBody && !capped && !approval) {
         found.push({
           rule: 'NEAR-UNPROTECTED-SPEND-ROUTE', severity: 'warn',
           title: 'Amount comes from the request with no cap',
