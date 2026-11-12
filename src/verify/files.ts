@@ -9,8 +9,10 @@ export interface SourceFile {
   /** Path relative to the project root, with forward slashes */
   path: string;
   content: string;
-  /** Tracked by git (false when untracked, or when the project isn't a git repo) */
+  /** Tracked or staged in git (false when untracked, or when the project isn't a git repo) */
   tracked: boolean;
+  /** Ignored by git (.gitignore): git would never publish it */
+  ignored: boolean;
 }
 
 export interface ProjectFiles {
@@ -36,7 +38,7 @@ export async function collectFiles(root: string): Promise<ProjectFiles> {
   const absoluteRoot = path.resolve(root);
   if (!await fs.pathExists(absoluteRoot)) throw new Error(`No such directory: ${root}`);
 
-  const { isGitRepo, tracked, commit } = gitInfo(absoluteRoot);
+  const { isGitRepo, tracked, ignored, commit } = gitInfo(absoluteRoot);
   const files: SourceFile[] = [];
 
   const walk = async (dir: string): Promise<void> => {
@@ -53,7 +55,7 @@ export async function collectFiles(root: string): Promise<ProjectFiles> {
       const stat = await fs.stat(full);
       if (stat.size > MAX_BYTES) continue;
       const rel = path.relative(absoluteRoot, full).split(path.sep).join('/');
-      files.push({ path: rel, content: await fs.readFile(full, 'utf8'), tracked: tracked.has(rel) });
+      files.push({ path: rel, content: await fs.readFile(full, 'utf8'), tracked: tracked.has(rel), ignored: ignored.has(rel) });
     }
   };
   await walk(absoluteRoot);
@@ -77,18 +79,26 @@ export async function collectFiles(root: string): Promise<ProjectFiles> {
   return { root: absoluteRoot, files, isGitRepo, commit, packageJson, treeHash: hash.digest('hex') };
 }
 
-function gitInfo(root: string): { isGitRepo: boolean; tracked: Set<string>; commit?: string } {
+function gitInfo(root: string): { isGitRepo: boolean; tracked: Set<string>; ignored: Set<string>; commit?: string } {
+  const git = (args: string[]) => execFileSync('git', args, { cwd: root, stdio: ['ignore', 'pipe', 'ignore'], maxBuffer: 64 * 1024 * 1024 }).toString();
   try {
-    const out = execFileSync('git', ['ls-files', '-z'], { cwd: root, stdio: ['ignore', 'pipe', 'ignore'] }).toString();
+    const tracked = new Set(git(['ls-files', '-z']).split('\0').filter(Boolean));
+    let ignored = new Set<string>();
+    try {
+      // Files on disk that .gitignore excludes (skipping node_modules and the like is done by the walker)
+      ignored = new Set(git(['ls-files', '-z', '--others', '--ignored', '--exclude-standard']).split('\0').filter(Boolean));
+    } catch {
+      ignored = new Set();
+    }
     let commit: string | undefined;
     try {
-      commit = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim();
+      commit = git(['rev-parse', 'HEAD']).trim();
     } catch {
       commit = undefined;
     }
-    return { isGitRepo: true, tracked: new Set(out.split('\0').filter(Boolean)), commit };
+    return { isGitRepo: true, tracked, ignored, commit };
   } catch {
-    return { isGitRepo: false, tracked: new Set() };
+    return { isGitRepo: false, tracked: new Set(), ignored: new Set() };
   }
 }
 

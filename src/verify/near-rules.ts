@@ -95,7 +95,10 @@ export function runNearStaticRules(project: ProjectFiles): RuleOutput {
     const found: Finding[] = [];
     for (const file of project.files) {
       const env = isEnvFile(path.basename(file.path));
-      if (env && !file.tracked) continue; // local, uncommitted env files are the right place
+      // Local secrets git will never publish (gitignored files, or untracked env files) are where keys belong.
+      // Found in a real run: a gitignored data/*.json key file was reported as "in the repo".
+      if (file.ignored && !file.tracked) continue;
+      if (env && !file.tracked) continue;
       for (const re of [PRIVATE_KEY_RE, SECP_PRIVATE_KEY_RE]) {
         re.lastIndex = 0;
         let m: RegExpExecArray | null;

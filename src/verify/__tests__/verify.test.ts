@@ -48,6 +48,15 @@ describe('apix verify --chain near (code checks)', () => {
     expect(report.summary.verdict).toBe('pass');
   });
 
+  it('ignores key files git will never publish, but flags them once they would be', async () => {
+    const files = { 'package.json': pkg, '.gitignore': 'data/\n', 'data/keys.json': `{"key":"${FAKE_KEY}"}\n` };
+    const ignoredDir = await project(files, ['package.json', '.gitignore']);
+    expect(rules(await verifyNearProject({ directory: ignoredDir, network: 'testnet', offline: true, apixVersion: 'test' }))).toEqual([]);
+
+    const exposed = await project({ ...files, '.gitignore': 'node_modules\n' }, ['package.json', '.gitignore']);
+    expect(rules(await verifyNearProject({ directory: exposed, network: 'testnet', offline: true, apixVersion: 'test' }))).toEqual(['NEAR-KEY-IN-REPO:fail']);
+  });
+
   it('flags secrets behind a public prefix and keys in browser code', async () => {
     const dir = await project({
       'package.json': pkg,
