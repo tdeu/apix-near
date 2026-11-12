@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>APIX for NEAR: build it, verify it, prove it</title>
+<meta name="description" content="APIX adds NEAR features to your app, checks any NEAR app for the mistakes coding agents make, and publishes the result on-chain.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..125,400..800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ink: #13213A;
+    --paper: #EDF0F3;
+    --sheet: #FFFFFF;
+    --tag: #F2C230;
+    --pass: #2F7D4F;
+    --fail: #B8342B;
+    --slate: #5E6B7D;
+    --rule: #CDD3DB;
+    --measure: 68ch;
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: 'Archivo', system-ui, sans-serif;
+    font-variation-settings: 'wdth' 100;
+    font-size: 1.0625rem;
+    line-height: 1.55;
+  }
+  a { color: var(--ink); text-underline-offset: 3px; text-decoration-thickness: 1px; }
+  a:hover { text-decoration-thickness: 2px; }
+  :focus-visible { outline: 3px solid var(--tag); outline-offset: 3px; border-radius: 2px; }
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 0 24px; }
+
+  header.top {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 22px 0; font-weight: 600;
+  }
+  header.top nav { display: flex; gap: 22px; font-weight: 500; font-size: 0.95rem; }
+  .wordmark { font-variation-settings: 'wdth' 125; font-weight: 800; font-size: 1.25rem; letter-spacing: 0.01em; text-decoration: none; }
+
+  /* Hero */
+  .hero {
+    display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
+    gap: 56px; align-items: start; padding: 48px 0 72px;
+  }
+  .hero h1 {
+    font-variation-settings: 'wdth' 125; font-weight: 800;
+    font-size: clamp(2.6rem, 6vw, 4.6rem); line-height: 0.98; letter-spacing: -0.01em;
+    margin: 0 0 28px;
+  }
+  .hero .lede { font-size: 1.25rem; line-height: 1.5; max-width: 34em; margin: 0 0 18px; }
+  .hero .sub { color: var(--slate); max-width: 34em; margin: 0 0 32px; }
+  .actions { display: flex; flex-wrap: wrap; gap: 14px; }
+  .btn {
+    display: inline-block; padding: 13px 22px; border-radius: 4px; font-weight: 600;
+    text-decoration: none; border: 2px solid var(--ink);
+  }
+  .btn.primary { background: var(--ink); color: var(--paper); }
+  .btn.primary:hover { background: #22345a; }
+  .btn.secondary:hover { background: var(--sheet); }
+
+  /* The inspection tag */
+  .tag {
+    position: relative; background: var(--tag); color: var(--ink);
+    padding: 34px 30px 26px 30px; border-radius: 6px 6px 6px 6px;
+    clip-path: polygon(0 18px, 18px 0, 100% 0, 100% 100%, 0 100%);
+    box-shadow: 0 1px 0 rgba(19, 33, 58, 0.25);
+    transform: rotate(1.2deg);
+  }
+  .tag::before { /* eyelet */
+    content: ''; position: absolute; top: 22px; right: 26px; width: 20px; height: 20px;
+    border-radius: 50%; background: var(--paper); box-shadow: inset 0 0 0 4px #d9ab22;
+  }
+  .tag .kind { font-weight: 600; font-size: 0.95rem; margin: 0 0 6px; }
+  .tag .subject { font-family: 'JetBrains Mono', monospace; font-size: 0.9rem; margin: 0 0 18px; word-break: break-all; }
+  .verdict {
+    display: flex; align-items: baseline; gap: 16px; border-top: 2px solid var(--ink); border-bottom: 2px solid var(--ink);
+    padding: 12px 0; margin-bottom: 16px;
+  }
+  .verdict .word { font-variation-settings: 'wdth' 125; font-weight: 800; font-size: 3.4rem; line-height: 1; }
+  .verdict .word.fail { color: var(--fail); }
+  .verdict .word.pass { color: var(--pass); }
+  .verdict .counts { font-weight: 500; }
+  .tag dl { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; margin: 0 0 14px; font-size: 0.92rem; }
+  .tag dt { font-weight: 600; }
+  .tag dd { margin: 0; font-family: 'JetBrains Mono', monospace; font-size: 0.84rem; word-break: break-all; }
+  .tag .source { font-size: 0.88rem; margin: 0; }
+  .tag[data-state="loading"] .verdict .word { opacity: 0.35; }
+
+  /* Sections */
+  section.band { padding: 72px 0; border-top: 1px solid var(--rule); }
+  section.band h2 {
+    font-variation-settings: 'wdth' 112; font-weight: 750;
+    font-size: clamp(1.8rem, 3.2vw, 2.4rem); line-height: 1.1; margin: 0 0 14px;
+  }
+  section.band > .wrap > p.intro { max-width: var(--measure); margin: 0 0 40px; color: var(--slate); }
+
+  .stages { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 32px; }
+  .stage h3 { font-variation-settings: 'wdth' 125; font-weight: 800; font-size: 1.5rem; margin: 0 0 8px; }
+  .stage p { margin: 0 0 16px; }
+  .stage ul { margin: 0 0 18px; padding-left: 1.1em; }
+  .stage li { margin-bottom: 6px; }
+  .stage code, p code, li code { font-family: 'JetBrains Mono', monospace; font-size: 0.86em; background: var(--sheet); padding: 1px 5px; border-radius: 3px; }
+
+  pre.term {
+    margin: 0; background: var(--ink); color: #E3E8EF; border-radius: 6px; padding: 16px 18px;
+    font-family: 'JetBrains Mono', monospace; font-size: 0.8rem; line-height: 1.6; overflow-x: auto; white-space: pre-wrap; overflow-wrap: anywhere;
+  }
+  pre.term .ok { color: #7FD3A0; }
+  pre.term .no { color: #F08A80; }
+  pre.term .warn { color: var(--tag); }
+  pre.term .dim { color: #95A1B3; }
+
+  /* Live panel */
+  .live { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); gap: 32px; }
+  .sheet { background: var(--sheet); border: 1px solid var(--rule); border-radius: 6px; padding: 24px 26px; }
+  .sheet h3 { margin: 0 0 4px; font-size: 1.15rem; font-weight: 700; }
+  .sheet .acct { font-family: 'JetBrains Mono', monospace; font-size: 0.82rem; color: var(--slate); margin: 0 0 18px; word-break: break-all; }
+  .meter { height: 10px; background: var(--paper); border-radius: 5px; overflow: hidden; margin: 6px 0 4px; }
+  .meter > span { display: block; height: 100%; background: var(--pass); width: 0; transition: width 0.8s ease; }
+  .facts { display: grid; grid-template-columns: auto 1fr; gap: 8px 18px; margin: 16px 0 0; }
+  .facts dt { color: var(--slate); }
+  .facts dd { margin: 0; font-weight: 600; }
+  .keys { margin: 18px 0 0; padding: 14px 16px; background: var(--paper); border-radius: 4px; font-size: 0.92rem; }
+  .keys strong { color: var(--pass); }
+  .keys.bad strong { color: var(--fail); }
+  .rules { margin: 0; padding-left: 1.1em; }
+  .rules li { margin-bottom: 8px; }
+  .status-line { font-size: 0.85rem; color: var(--slate); margin-top: 14px; }
+
+  /* Run it */
+  .run { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 32px; align-items: start; }
+  .run p { max-width: var(--measure); }
+
+  footer { border-top: 1px solid var(--rule); padding: 32px 0 48px; color: var(--slate); font-size: 0.92rem; }
+  footer .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; }
+
+  @media (max-width: 900px) {
+    .hero, .live, .run { grid-template-columns: 1fr; }
+    .stages { grid-template-columns: 1fr; }
+    .tag { transform: none; }
+    header.top nav { display: none; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .meter > span { transition: none; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <a class="wordmark" href="#">APIX</a>
+    <nav aria-label="Page">
+      <a href="#how">How it works</a>
+      <a href="#live">Live on testnet</a>
+      <a href="#run">Run it</a>
+      <a href="https://github.com/tdeu/apix-near">GitHub</a>
+    </nav>
+  </header>
+
+  <main>
+    <div class="hero">
+      <div>
+        <h1>Build it.<br>Verify it.<br>Prove it.</h1>
+        <p class="lede">Coding agents can build a whole NEAR app from one prompt. The people using them usually can't check whether that code is safe.</p>
+        <p class="sub">APIX adds wallet login, tokens and agent payments to your app, checks any NEAR app for the mistakes that lose funds, and publishes the result on-chain where anyone can check it.</p>
+        <div class="actions">
+          <a class="btn primary" href="https://github.com/tdeu/apix-near#1-try-it-in-2-minutes-no-account-no-keys">Try it in 2 minutes</a>
+          <a class="btn secondary" href="#live">See it live on testnet</a>
+        </div>
+      </div>
+
+      <aside class="tag" id="tag" data-state="loading" aria-live="polite" aria-label="Latest on-chain attestation">
+        <p class="kind">On-chain attestation, read live from NEAR</p>
+        <p class="subject" id="tag-app">examples/unsafe-tip-agent</p>
+        <div class="verdict">
+          <span class="word" id="tag-verdict">…</span>
+          <span class="counts" id="tag-counts">Reading the contract</span>
+        </div>
+        <dl>
+          <dt>Report hash</dt><dd id="tag-hash">—</dd>
+          <dt>Attested by</dt><dd id="tag-by">—</dd>
+          <dt>When</dt><dd id="tag-when">—</dd>
+          <dt>Contract</dt><dd id="tag-contract">—</dd>
+        </dl>
+        <p class="source" id="tag-source">This app was written on purpose with the mistakes coding agents often make.</p>
+      </aside>
+    </div>
+
+    <section class="band" id="how">
+      <div class="wrap" style="padding:0">
+        <h2>Three commands, one loop</h2>
+        <p class="intro">Each stage works on its own. Together they take an app from first line to launch with a record of what was checked.</p>
+        <div class="stages">
+          <div class="stage">
+            <h3>Build</h3>
+            <p>Add working NEAR features to a Next.js app. Users sign with their own wallet; the app never holds their keys.</p>
+            <ul>
+              <li><code>apix add wallet</code>: wallet login with NEAR Connect</li>
+              <li><code>apix near token create</code>: a NEP-141 token on a locked account, so no one can mint more</li>
+              <li><code>apix add agent-wallet</code>: an AI agent pays through a vault with limits, never with a raw key</li>
+            </ul>
+<pre class="term"><span class="dim">$</span> apix add token --chain near
+<span class="ok">✅ NEAR token added (3 files written)</span>
+   + lib/near/token.ts
+   + app/api/token/route.ts
+   + components/near/TokenPanel.tsx
+<span class="ok">🔎 Verified: the project passes 7 code checks.</span></pre>
+          </div>
+          <div class="stage">
+            <h3>Verify</h3>
+            <p>Check any NEAR app, whether APIX, an agent or a person wrote it. Twelve rules on the code and on the chain, each with a fix in plain words.</p>
+<pre class="term"><span class="dim">$</span> apix verify
+<span class="no">FAIL</span> Secret exposed to the browser
+     NEXT_PUBLIC_NEAR_PRIVATE_KEY is copied into
+     the JavaScript every visitor downloads.
+<span class="no">FAIL</span> Anyone on the internet can make this
+     route spend  <span class="dim">app/api/pay/route.ts</span>
+<span class="no">FAIL</span> An AI model can spend with no on-chain
+     limit  <span class="dim">lib/agent.ts</span>
+<span class="warn">WARN</span> Mainnet is hardcoded in code that spends</pre>
+          </div>
+          <div class="stage">
+            <h3>Prove</h3>
+            <p>Publish the report's hash and verdict on NEAR, in a contract with no access keys. Nobody can edit the record, and anyone can check a report against it.</p>
+<pre class="term"><span class="dim">$</span> apix attest --account you.testnet
+<span class="ok">✅ Attested: FAIL (7 failures, 3 warnings)</span>
+<span class="dim">$</span> apix attestation you.testnet my-app \
+    --report apix-report.json
+<span class="ok">✓ matches the on-chain attestation.</span></pre>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="band" id="live">
+      <div class="wrap" style="padding:0">
+        <h2>Running on testnet right now</h2>
+        <p class="intro">Read from NEAR as you load this page, not screenshots. The vault below belongs to an AI agent from our test run.</p>
+        <div class="live">
+          <div class="sheet">
+            <h3>Agent Vault</h3>
+            <p class="acct" id="v-id">—</p>
+            <div>Spent today: <strong id="v-spent">…</strong> of <span id="v-daily">…</span> NEAR</div>
+            <div class="meter" role="img" id="v-meter-label" aria-label="Share of the daily limit spent"><span id="v-meter"></span></div>
+            <dl class="facts">
+              <dt>Most per payment</dt><dd id="v-pertx">…</dd>
+              <dt>Can pay</dt><dd id="v-allow">…</dd>
+              <dt>State</dt><dd id="v-state">…</dd>
+              <dt>Payments made</dt><dd id="v-count">…</dd>
+            </dl>
+            <div class="keys" id="v-keys">Reading the account's keys…</div>
+            <p class="status-line" id="v-status"></p>
+          </div>
+          <div class="sheet">
+            <h3>What the vault enforces</h3>
+            <p class="acct">Checked by the contract on every payment</p>
+            <ul class="rules">
+              <li>Each payment and each day stays under the owner's limits</li>
+              <li>Only allowlisted accounts can be paid</li>
+              <li>Bigger payments wait for the owner's approval</li>
+              <li>The owner can pause the vault or revoke the agent's key at once</li>
+              <li>The agent's key can't change any of this: NEAR rejects it before the contract runs</li>
+            </ul>
+            <h3 style="margin-top:26px">Token</h3>
+            <p class="acct" id="t-id">—</p>
+            <dl class="facts" style="margin-top:0">
+              <dt>Name</dt><dd id="t-name">…</dd>
+              <dt>Total supply</dt><dd id="t-supply">…</dd>
+              <dt>Keys on the account</dt><dd id="t-keys">…</dd>
+            </dl>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="band" id="run">
+      <div class="wrap run" style="padding:0">
+        <div>
+          <h2>Run it yourself</h2>
+          <p>Node.js 22.12 or newer. The first two checks need no account and no keys. The testnet script creates its own free accounts with the NEAR faucet and runs the whole loop on-chain in about five minutes.</p>
+          <p>APIX started as a Hedera tool and won the Hedera Africa Hackathon in 2025. Everything NEAR was built for NEAR HACKATHON in November 2026, and the repository shows exactly what changed.</p>
+          <p><a href="https://github.com/tdeu/apix-near">Read the README</a> · <a href="https://github.com/tdeu/apix-near/blob/main/docs/NEAR_TESTNET_PROOF.md">See every testnet transaction</a></p>
+        </div>
+<pre class="term"><span class="dim">$</span> git clone https://github.com/tdeu/apix-near
+<span class="dim">$</span> cd apix-near &amp;&amp; npm ci &amp;&amp; npm run build
+
+<span class="dim"># an unsafe app, then one APIX built</span>
+<span class="dim">$</span> node dist/cli/index.js verify examples/unsafe-tip-agent --offline
+<span class="dim">$</span> node dist/cli/index.js verify examples/agent-shop --offline
+
+<span class="dim"># the full loop on NEAR testnet</span>
+<span class="dim">$</span> scripts/near-testnet-demo.sh</pre>
+      </div>
+    </section>
+  </main>
+</div>
+
+<footer>
+  <div class="wrap">
+    <span>Built at NEAR HACKATHON by Emtée Studio. MIT licensed.</span>
+    <span><a href="https://github.com/tdeu/apix-near">github.com/tdeu/apix-near</a></span>
+  </div>
+</footer>
+
+<script>
+  // Accounts from our testnet run (docs/NEAR_TESTNET_PROOF.md)
+  const NET = {
+    rpc: ['https://rpc.testnet.near.org', 'https://test.rpc.fastnear.com'],
+    explorer: 'https://testnet.nearblocks.io',
+    attestation: { contract: 'attest-174601.apix-demo-174601-29061.testnet', attester: 'apix-demo-174601-29061.testnet', app: 'examples/unsafe-tip-agent' },
+    vault: 'vault-174601.apix-demo-174601-29061.testnet',
+    token: 'pts174601.apix-demo-174601-29061.testnet',
+  };
+
+  async function rpc(method, params) {
+    let lastError;
+    for (const url of NET.rpc) {
+      try {
+        const res = await fetch(url, {
+          method: 'POST', headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ jsonrpc: '2.0', id: 'apix', method, params }),
+        });
+        const body = await res.json();
+        if (body.error) throw new Error(body.error.cause?.name || body.error.message || 'RPC error');
+        if (body.result && typeof body.result.error === 'string') throw new Error(body.result.error);
+        return body.result;
+      } catch (e) { lastError = e; }
+    }
+    throw lastError;
+  }
+
+  async function view(contract, method, args = {}) {
+    const result = await rpc('query', {
+      request_type: 'call_function', finality: 'final', account_id: contract, method_name: method,
+      args_base64: btoa(JSON.stringify(args)),
+    });
+    return JSON.parse(new TextDecoder().decode(new Uint8Array(result.result)));
+  }
+
+  const keysOf = (account) => rpc('query', { request_type: 'view_access_key_list', finality: 'final', account_id: account });
+  const $ = (id) => document.getElementById(id);
+  const link = (path, text) => `<a href="${NET.explorer}/${path}">${text}</a>`;
+
+  function near(yocto, digits = 3) {
+    const v = BigInt(yocto);
+    const whole = v / 10n ** 24n;
+    const frac = (v % 10n ** 24n).toString().padStart(24, '0').slice(0, digits).replace(/0+$/, '');
+    return frac ? `${whole}.${frac}` : whole.toString();
+  }
+
+  async function loadAttestation() {
+    const a = NET.attestation;
+    $('tag-contract').innerHTML = link(`address/${a.contract}`, a.contract);
+    try {
+      const rec = await view(a.contract, 'get_attestation', { attester: a.attester, app_id: a.app });
+      if (!rec) throw new Error('no attestation found');
+      const word = $('tag-verdict');
+      word.textContent = rec.verdict.toUpperCase();
+      word.className = 'word ' + (rec.verdict === 'pass' ? 'pass' : 'fail');
+      $('tag-counts').textContent = `${rec.failures} failures, ${rec.warnings} warnings, ${rec.checks_run} checks`;
+      $('tag-app').textContent = rec.app_id;
+      $('tag-hash').textContent = rec.report_hash;
+      $('tag-by').innerHTML = link(`address/${rec.attester}`, rec.attester);
+      $('tag-when').textContent = new Date(Number(BigInt(rec.timestamp_ns) / 1000000n)).toUTCString().replace(' GMT', ' UTC');
+      $('tag').dataset.state = 'ready';
+    } catch (e) {
+      $('tag-verdict').textContent = '?';
+      $('tag-counts').textContent = `Couldn't read NEAR testnet (${e.message}). Reload to try again.`;
+    }
+  }
+
+  async function loadVault() {
+    $('v-id').innerHTML = link(`address/${NET.vault}`, NET.vault);
+    try {
+      const [s, allow, keys] = await Promise.all([view(NET.vault, 'get_status'), view(NET.vault, 'get_allowlist'), keysOf(NET.vault)]);
+      const spent = BigInt(s.spent_in_window), daily = BigInt(s.policy.daily_limit);
+      $('v-spent').textContent = near(spent);
+      $('v-daily').textContent = near(daily);
+      const pct = daily > 0n ? Number((spent * 1000n) / daily) / 10 : 0;
+      $('v-meter').style.width = Math.min(100, pct) + '%';
+      $('v-meter-label').setAttribute('aria-label', `${pct}% of the daily limit spent`);
+      $('v-pertx').textContent = near(s.policy.per_tx_limit) + ' NEAR';
+      $('v-allow').textContent = allow.join(', ');
+      $('v-state').textContent = s.paused ? 'Paused by the owner' : 'Active';
+      $('v-count').textContent = s.payments_made;
+      const list = keys.keys || [];
+      const full = list.filter(k => k.access_key.permission === 'FullAccess').length;
+      const fc = list.length - full;
+      $('v-keys').className = 'keys' + (full ? ' bad' : '');
+      $('v-keys').innerHTML = full
+        ? `<strong>${full} full-access key${full > 1 ? 's' : ''}</strong> on this account: its holder could bypass every limit.`
+        : `<strong>No full-access key.</strong> ${fc} function-call key${fc === 1 ? '' : 's'}, limited to <code>pay</code> and <code>request_approval</code>. Only the contract's rules move this money.`;
+      $('v-status').textContent = 'The daily window is 24 hours from the first payment, so "spent today" resets on its own.';
+    } catch (e) {
+      $('v-keys').textContent = `Couldn't read NEAR testnet (${e.message}). Reload to try again.`;
+    }
+  }
+
+  async function loadToken() {
+    $('t-id').innerHTML = link(`address/${NET.token}`, NET.token);
+    try {
+      const [m, supply, keys] = await Promise.all([view(NET.token, 'ft_metadata'), view(NET.token, 'ft_total_supply'), keysOf(NET.token)]);
+      $('t-name').textContent = `${m.name} (${m.symbol})`;
+      const s = supply.padStart(m.decimals + 1, '0');
+      const whole = BigInt(s.slice(0, s.length - m.decimals)).toLocaleString('en-US');
+      $('t-supply').textContent = `${whole} ${m.symbol}, fixed`;
+      const n = (keys.keys || []).length;
+      $('t-keys').textContent = n === 0 ? 'None: no one can mint more or change the code' : `${n}`;
+    } catch (e) {
+      $('t-name').textContent = `Couldn't read NEAR testnet (${e.message})`;
+    }
+  }
+
+  loadAttestation(); loadVault(); loadToken();
+</script>
+</body>
+</html>
