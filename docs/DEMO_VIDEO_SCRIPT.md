@@ -17,33 +17,28 @@ Have one browser tab open on https://github.com/tdeu/apix-near.
 
 ---
 
-## 0:00 – 0:15 · Hook
+## 0:00 – 0:20 · Hook: a real agent build
 
-[GitHub repo page, then the terminal]
+[GitHub: open `experiments/2026-11-12-agent-economy.md`, scroll to "What the agent planned"]
 
-> "Coding agents can now build a whole NEAR app from one prompt. We gave one NEAR's official Agent Economy hackathon prompt. Here's what it built, and here's what APIX found."
+> "We gave a coding agent NEAR's official Agent Economy hackathon prompt, with no hints. In twenty minutes it built a careful-looking app: no keys in the browser, nothing committed, testnet by default. It even had a rule: payments over a limit wait for a human to click Approve."
 
-*(If the agent experiment found nothing serious, use instead: "…The app works. But would you know if it was safe?")*
+## 0:20 – 0:50 · Verify finds what matters
 
-## 0:15 – 0:35 · The problem
-
-[Terminal, still]
-
-> "The people using these agents usually can't check whether the code is safe. A key visible in the browser, a payment route open to anyone, an AI tool that can send everything. On a blockchain, those mistakes are irreversible. APIX builds NEAR features into your app, verifies they're safe, and proves it on-chain."
-
-## 0:35 – 1:05 · Verify
-
-[Type:]
+[Terminal, in the agent's app folder:]
 
 ```
-node dist/cli/index.js verify examples/unsafe-tip-agent --offline
+cd /c/Users/thoma/Bureau/agent-test-2
+node /c/Users/thoma/apix-near/dist/cli/index.js verify . --out report.json
 ```
 
-*(Or, better if the experiment found issues: `cd` into the agent's app and run `verify` there.)*
+[Show the two FAIL lines]
 
-[Scroll slowly over the FAIL lines]
+> "apix verify found two things. Anyone on the internet could start a paid run. And anyone could approve the payments that were supposed to wait for a human. Each finding says what's wrong in plain words, and how to fix it. Honest note: on its first pass APIX got this app wrong too; we fixed the rules, and the write-up is in the repo."
 
-> "apix verify checks any NEAR app, whoever wrote it: twelve rules on the code and on the chain. Here: a private key shipped to the browser, a payment route anyone on the internet can call, and an AI tool that can spend with no limit. Every finding says what's wrong in plain words, and how to fix it."
+## 0:50 – 1:05 · The problem in one sentence
+
+> "That's the gap: agents now build whole NEAR apps, but the people using them can't check whether that code is safe. APIX builds NEAR features into your app, verifies them, and proves it on-chain."
 
 ## 1:05 – 1:40 · Build
 
