@@ -57,3 +57,4 @@ note.md
 # Rust contract builds
 contracts/*/target/
 apix-report.json
+.demo-*.json
